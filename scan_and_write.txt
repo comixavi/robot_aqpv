@@ -1,0 +1,2 @@
+rosbag record -O scan_record.bag  --duration 30 /scan
+rostopic echo -b scan_record.bag -p /scan > scan_record.txt
