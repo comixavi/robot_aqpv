@@ -4,7 +4,6 @@ import random
 
 
 def bresenham_line(x0, y0, x1, y1):
-    """Yield integer coordinates on the line from (x0, y0) to (x1, y1)."""
     dx = x1 - x0
     dy = y1 - y0
     xsign = 1 if dx > 0 else -1

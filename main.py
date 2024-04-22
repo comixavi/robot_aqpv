@@ -112,10 +112,71 @@ def random_rrt_pos(current_pos, rows, cols, max_dist=2):
         return NodeRRTStar(x, y) if 0 <= x < cols and 0 <= y < rows else None
 
 
+def random_rrt_pos_with_checks(current_pos, rows, cols):
+    x = random.randint(0, cols-1)
+    y = random.randint(0, rows-1)
+
+    if type(current_pos) == NodeRRT:
+        return NodeRRT(x, y) if 0 <= x < cols and 0 <= y < rows else None
+    else:
+        return NodeRRTStar(x, y) if 0 <= x < cols and 0 <= y < rows else None
+    pass
+
 
 def obstacle_collide(grid, new_pos):
     return grid[new_pos.y, new_pos.x] == MapState.OBSTACLE.value or \
            grid[new_pos.y, new_pos.x] == MapState.EXTENDED_OBSTACLE.value
+
+
+def obstacle_collide_with_checks(grid, current_pos, new_pose, checked_combos=None):
+    if current_pos is None or new_pose is None:
+        return False
+
+    if checked_combos is not None:
+        if (current_pos.x, current_pos.y, new_pose.x, new_pose.y,) in checked_combos.keys():
+            return True
+
+    if new_pose.x == current_pos.x and new_pose.y == current_pos.y:
+        return True
+
+    if new_pose.x == current_pos.x:  # x1 = x2 -> same j (cols);
+        start_i = min(new_pose.y, current_pos.y)
+        end_i = max(new_pose.y, current_pos.y)
+        j = new_pose.x
+        for i in range(start_i, end_i+1):
+            if grid[i, j] == MapState.OBSTACLE.value or \
+               grid[i, j] == MapState.EXTENDED_OBSTACLE.value:
+                if checked_combos is not None:
+                    checked_combos[(current_pos.x, current_pos.y, new_pose.x, new_pose.y)] = True
+                return True
+
+    if new_pose.y == current_pos.y:
+        start_j = min(new_pose.x, current_pos.x)
+        end_j = max(new_pose.x, current_pos.x)
+        i = new_pose.y
+        for j in range(start_j, end_j+1):
+            if grid[i, j] == MapState.OBSTACLE.value or \
+               grid[i, j] == MapState.EXTENDED_OBSTACLE.value:
+                if checked_combos is not None:
+                    checked_combos[(current_pos.x, current_pos.y, new_pose.x, new_pose.y)] = True
+                return True
+
+    if new_pose.y != current_pos.y and new_pose.x != current_pos.x:
+        start_i = min(new_pose.y, current_pos.y)
+        end_i = max(new_pose.y, current_pos.y)
+
+        start_j = min(new_pose.x, current_pos.x)
+        end_j = max(new_pose.x, current_pos.x)
+
+        for i in range(start_i, end_i + 1):
+            for j in range(start_j, end_j + 1):
+                if grid[i, j] == MapState.OBSTACLE.value or \
+                   grid[i, j] == MapState.EXTENDED_OBSTACLE.value:
+                    if checked_combos is not None:
+                        checked_combos[(current_pos.x, current_pos.y, new_pose.x, new_pose.y)] = True
+                    return True
+
+    return False
 
 
 def distance(node1, node2):
@@ -131,6 +192,15 @@ def nearest_node(vertices, new_node):
             min_distance = dist
             nearest_nd = vertex
     return nearest_nd
+
+
+# def nearest_nodes(vertices, new_node, max_distance = 16):
+#     nearest_nd = []
+#     for vertex in vertices:
+#         dist = distance(vertex, new_node)
+#         if dist < max_distance:
+#             nearest_nd.append(vertex)
+#     return nearest_nd
 
 
 def rrt(grid, start, goal, lim=100_000):
@@ -162,8 +232,8 @@ def rrt(grid, start, goal, lim=100_000):
 
             while current_node is not None:
                 path.append((current_node.y, current_node.x))
-                print((current_node.x, current_node.y))
                 current_node = current_node.parent
+
             path.append((start[0], start[1]))
             path.reverse()
 
@@ -190,19 +260,29 @@ def rewire_rrt_star(tree, new_node, max_radius):
                 node.cost = new_cost
 
 
+def rewire_rrt_star_with_check(grid, tree, new_node, max_radius=36):
+    for node in tree:
+        if distance(node, new_node) < max_radius and not obstacle_collide_with_checks(grid, new_node, node):
+            new_cost = new_node.cost + distance(node, new_node)
+            if new_cost < node.cost:
+                node.parent = new_node
+                node.cost = new_cost
+
+
 def rrt_star(grid, start, goal, lim=100_000):
     rows, cols = len(grid), len(grid[0])
     counter = 0
     moves = []
     current_pos = NodeRRTStar(start[0], start[1])
+    #visited_locations = []
 
     while counter < lim:
-        new_pose = random_rrt_pos(NodeRRTStar(current_pos), rows, cols)
+        new_pose = random_rrt_pos_with_checks(NodeRRTStar(current_pos), rows, cols)
 
         if new_pose is None:
             continue
 
-        if obstacle_collide(grid, new_pose):
+        if obstacle_collide_with_checks(grid, new_pose, current_pos):
             continue
 
         nearest_nd = nearest_node(moves, new_pose)
@@ -213,15 +293,81 @@ def rrt_star(grid, start, goal, lim=100_000):
 
         moves.append(new_pose)
 
-        rewire_rrt_star(moves, current_pos, 2)
-
+        #rewire_rrt_star(moves, current_pos, 2)
+        rewire_rrt_star_with_check(grid, moves, current_pos, 16)
+        # print(visited_locations)
+        # print(new_pose.x, " ", new_pose.y)
+        # print(nearest_nd.x, " ", nearest_nd.y)
+        # print("")
         if goal[0] == new_pose.x and goal[1] == new_pose.y:
             path = []
             current_node = new_pose
 
             while current_node is not None:
                 path.append((current_node.y, current_node.x))
-                print((current_node.x, current_node.y))
+                current_node = current_node.parent
+            path.append((start[0], start[1]))
+            path.reverse()
+
+            return path
+
+        counter += 1
+
+    return None
+
+
+def my_rrt(grid, start, goal, lim=100_000):
+    rows, cols = len(grid), len(grid[0])
+    counter = 0
+    moves = []
+    current_pos = NodeRRTStar(start[0], start[1])
+    checked_combos = dict()
+    node_goal = NodeRRTStar(goal[0], goal[1])
+    # visited_locations = []
+
+    while counter < lim:
+        nb_of_new_poses = 0
+        nb_of_target_poses = 3
+        min_cost = float('inf')
+        new_pose = None
+
+        while nb_of_new_poses < nb_of_target_poses:
+            local_pose = random_rrt_pos_with_checks(NodeRRTStar(current_pos), rows, cols)
+
+            if local_pose is None:
+                continue
+            if obstacle_collide_with_checks(grid, local_pose, current_pos, checked_combos):
+                continue
+
+            nb_of_new_poses += 1
+            local_cost = distance(local_pose, node_goal)
+            if local_cost < min_cost:
+                min_cost = local_cost
+                new_pose = NodeRRTStar(local_pose.x, local_pose.y)
+
+        if new_pose is None:
+            continue
+
+        nearest_nd = nearest_node(moves, new_pose)
+
+        new_pose.parent = nearest_nd
+
+        current_pos = new_pose
+
+        moves.append(new_pose)
+
+        #rewire_rrt_star(moves, current_pos, 36)
+        rewire_rrt_star_with_check(grid, moves, current_pos, 16)
+        # print(visited_locations)
+        # print(new_pose.x, " ", new_pose.y)
+        # print(nearest_nd.x, " ", nearest_nd.y)
+        # print("")
+        if goal[0] == new_pose.x and goal[1] == new_pose.y:
+            path = []
+            current_node = new_pose
+
+            while current_node is not None:
+                path.append((current_node.y, current_node.x))
                 current_node = current_node.parent
             path.append((start[0], start[1]))
             path.reverse()
@@ -611,7 +757,6 @@ def plot_complete_scan(path_scan1, path_scan2):
             plt.legend(legend_handles, legend_labels, loc='upper right')
 
             plt.tight_layout()
-            plt.pause(1000)
 
         continuous_time = False
         if continuous_time:
@@ -652,17 +797,15 @@ def plot_complete_scan(path_scan1, path_scan2):
             plt.ylabel('Y')
 
             path_astar = astar(map_matrix, (robot_point[0], robot_point[1]), [goal[1], goal[0]])
-            path_rrt = rrt(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
-            path_rrt_star = rrt_star(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
-
             if path_astar is not None:
                 path_astar = np.array(path_astar)
                 plt.plot(path_astar[:, 1], path_astar[:, 0], color='lime', marker='o')
                 legend_labels.append("A* Path")
                 legend_handles.append(
                     plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='lime', markersize=10, label='A* Path'))
-                print("Solution found")
+                print("A* Solution found")
 
+            path_rrt = rrt(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
             if path_rrt is not None:
                 path_rrt = np.array(path_rrt)
                 plt.plot(path_rrt[:, 1], path_rrt[:, 0], color='magenta', marker='o')
@@ -670,8 +813,9 @@ def plot_complete_scan(path_scan1, path_scan2):
                 legend_handles.append(
                     plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='magenta', markersize=10,
                                label='RRT Path'))
-                print("Solution found")
+                print("RRT Solution found")
 
+            path_rrt_star = rrt_star(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
             if path_rrt_star is not None:
                 path_rrt_star = np.array(path_rrt_star)
                 plt.plot(path_rrt_star[:, 1], path_rrt_star[:, 0], color=(10 / 255, 155 / 255, 255 // 255), marker='o')
@@ -679,7 +823,17 @@ def plot_complete_scan(path_scan1, path_scan2):
                 legend_handles.append(
                     plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=(10 / 255, 155 / 255, 255 / 255),
                                markersize=10, label='RRT* Path'))
-                print("Solution found")
+                print("RRT* Solution found")
+
+            path_my_rrt = my_rrt(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
+            if path_my_rrt is not None:
+                path_my_rrt = np.array(path_my_rrt)
+                plt.plot(path_my_rrt[:, 1], path_my_rrt[:, 0], color='r', marker='o')
+                legend_labels.append("A/RRT* Path")
+                legend_handles.append(
+                    plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='r',
+                               markersize=10, label='A/RRT* Path'))
+                print("My A/RRT Solution found")
 
             plt.legend(legend_handles, legend_labels, loc='upper right')
 
@@ -691,7 +845,6 @@ def plot_complete_scan(path_scan1, path_scan2):
         plt.pause(Ts)
         plt.pause(1000)
         plt.clf()
-
 
 
 def plot_scan(*paths, nbOfRanges=1681):
