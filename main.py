@@ -1,8 +1,5 @@
 import math
-import heapq
 from collections import namedtuple
-from enum import Enum
-import random
 
 from matplotlib.colors import ListedColormap, BoundaryNorm
 import matplotlib.pyplot as plt
@@ -11,32 +8,10 @@ from math import sin, cos, pi
 
 from sklearn.cluster import DBSCAN
 
-
-class NodeRRT:
-    def __init__(self, x_or_node, y=None):
-        if y is None:
-            self.x = x_or_node.x
-            self.y = x_or_node.y
-        else:
-            self.x = x_or_node
-            self.y = y
-        self.parent = None
-
-
-class NodeRRTStar:
-    def __init__(self, x_or_node, y=None):
-        if y is None:
-            self.x = x_or_node.x
-            self.y = x_or_node.y
-            self.parent = None
-            self.cost = 0
-            self.children = []
-        else:
-            self.x = x_or_node
-            self.y = y
-            self.parent = None
-            self.cost = 0
-            self.children = []
+from astar_ import astar
+from rrt_ import rrt, rrt_star, my_rrt
+from mapstate_ import MapState
+from util_ import bresenham_line
 
 
 def cache_fct(minimum, step, maximum, fct):
@@ -46,337 +21,6 @@ def cache_fct(minimum, step, maximum, fct):
         dictFct[val] = fct(val)
         minimum = minimum + step
     return dictFct
-
-
-def heuristic_cost_estimate(current, goal):
-    return np.sqrt((current[0] - goal[0]) ** 2 + (current[1] - goal[1]) ** 2)
-
-
-def reconstruct_path(came_from, current):
-    path = []
-    while current in came_from:
-        path.append(current)
-        current = came_from[current]
-    path.append(current)
-    return path[::-1]
-
-
-def astar(grid, start, goal):
-    rows, cols = len(grid), len(grid[0])
-
-    open_set = []
-    heapq.heappush(open_set, (0, start))
-    came_from = {}
-    last_move = ()
-    g_score = {start: 0}
-    f_score = {start: heuristic_cost_estimate(start, goal)}
-
-    while open_set:
-        _, current = heapq.heappop(open_set)
-        possible_moves = [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (-1, 1), (-1, -1), (1, -1)]
-
-        if current[0] == goal[0] and current[1] == goal[1]:
-            return reconstruct_path(came_from, current)
-
-        for dx, dy in possible_moves:
-            neighbor = (current[0] + dx, current[1] + dy)
-
-            if neighbor[0] < 0 or neighbor[0] >= rows or neighbor[1] < 0 or neighbor[1] >= cols:
-                continue
-
-            if (grid[neighbor[0]][neighbor[1]] == MapState.OBSTACLE.value or
-                    grid[neighbor[0]][neighbor[1]] == MapState.EXTENDED_OBSTACLE.value):
-                continue
-
-            tentative_g_score = g_score[current] + 1
-
-            if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
-                came_from[neighbor] = current
-                g_score[neighbor] = tentative_g_score
-                off_f = 1 if last_move == (dx, dy) else 1.25
-                last_move = (dx, dy)
-                f_score[neighbor] = tentative_g_score + off_f * heuristic_cost_estimate(neighbor, goal)
-                heapq.heappush(open_set, (f_score[neighbor], neighbor))
-    return None
-
-
-def random_rrt_pos(current_pos, rows, cols, max_dist=2):
-    x = random.randint(current_pos.x - max_dist, current_pos.x + max_dist)
-    y = random.randint(current_pos.y - max_dist, current_pos.y + max_dist)
-    #x = random.randint(0, cols)
-    #y = random.randint(0, rows)
-
-    if type(current_pos) == NodeRRT:
-        return NodeRRT(x, y) if 0 <= x < cols and 0 <= y < rows else None
-    else:
-        return NodeRRTStar(x, y) if 0 <= x < cols and 0 <= y < rows else None
-
-
-def random_rrt_pos_with_checks(current_pos, rows, cols):
-    x = random.randint(0, cols-1)
-    y = random.randint(0, rows-1)
-
-    if type(current_pos) == NodeRRT:
-        return NodeRRT(x, y) if 0 <= x < cols and 0 <= y < rows else None
-    else:
-        return NodeRRTStar(x, y) if 0 <= x < cols and 0 <= y < rows else None
-    pass
-
-
-def obstacle_collide(grid, new_pos):
-    return grid[new_pos.y, new_pos.x] == MapState.OBSTACLE.value or \
-           grid[new_pos.y, new_pos.x] == MapState.EXTENDED_OBSTACLE.value
-
-
-def obstacle_collide_with_checks(grid, current_pos, new_pose, checked_combos=None):
-    if current_pos is None or new_pose is None:
-        return False
-
-    if checked_combos is not None:
-        if (current_pos.x, current_pos.y, new_pose.x, new_pose.y,) in checked_combos.keys():
-            return True
-
-    if new_pose.x == current_pos.x and new_pose.y == current_pos.y:
-        return True
-
-    if new_pose.x == current_pos.x:  # x1 = x2 -> same j (cols);
-        start_i = min(new_pose.y, current_pos.y)
-        end_i = max(new_pose.y, current_pos.y)
-        j = new_pose.x
-        for i in range(start_i, end_i+1):
-            if grid[i, j] == MapState.OBSTACLE.value or \
-               grid[i, j] == MapState.EXTENDED_OBSTACLE.value:
-                if checked_combos is not None:
-                    checked_combos[(current_pos.x, current_pos.y, new_pose.x, new_pose.y)] = True
-                return True
-
-    if new_pose.y == current_pos.y:
-        start_j = min(new_pose.x, current_pos.x)
-        end_j = max(new_pose.x, current_pos.x)
-        i = new_pose.y
-        for j in range(start_j, end_j+1):
-            if grid[i, j] == MapState.OBSTACLE.value or \
-               grid[i, j] == MapState.EXTENDED_OBSTACLE.value:
-                if checked_combos is not None:
-                    checked_combos[(current_pos.x, current_pos.y, new_pose.x, new_pose.y)] = True
-                return True
-
-    if new_pose.y != current_pos.y and new_pose.x != current_pos.x:
-        start_i = min(new_pose.y, current_pos.y)
-        end_i = max(new_pose.y, current_pos.y)
-
-        start_j = min(new_pose.x, current_pos.x)
-        end_j = max(new_pose.x, current_pos.x)
-
-        for i in range(start_i, end_i + 1):
-            for j in range(start_j, end_j + 1):
-                if grid[i, j] == MapState.OBSTACLE.value or \
-                   grid[i, j] == MapState.EXTENDED_OBSTACLE.value:
-                    if checked_combos is not None:
-                        checked_combos[(current_pos.x, current_pos.y, new_pose.x, new_pose.y)] = True
-                    return True
-
-    return False
-
-
-def distance(node1, node2):
-    return abs(node1.x - node2.x) + abs(node1.y - node2.y)
-
-
-def nearest_node(vertices, new_node):
-    min_distance = float('inf')
-    nearest_nd = None
-    for vertex in vertices:
-        dist = distance(vertex, new_node)
-        if dist < min_distance:
-            min_distance = dist
-            nearest_nd = vertex
-    return nearest_nd
-
-
-# def nearest_nodes(vertices, new_node, max_distance = 16):
-#     nearest_nd = []
-#     for vertex in vertices:
-#         dist = distance(vertex, new_node)
-#         if dist < max_distance:
-#             nearest_nd.append(vertex)
-#     return nearest_nd
-
-
-def rrt(grid, start, goal, lim=100_000):
-    rows, cols = len(grid), len(grid[0])
-    counter = 0
-    moves = []
-    current_pos = NodeRRT(start[0], start[1])
-
-    while counter < lim:
-        new_pose = random_rrt_pos(NodeRRT(current_pos), rows, cols)
-
-        if new_pose is None:
-            continue
-
-        if obstacle_collide(grid, new_pose):
-            continue
-
-        nearest_nd = nearest_node(moves, new_pose)
-
-        new_pose.parent = nearest_nd
-
-        current_pos = new_pose
-
-        moves.append(new_pose)
-
-        if goal[0] == new_pose.x and goal[1] == new_pose.y:
-            path = []
-            current_node = new_pose
-
-            while current_node is not None:
-                path.append((current_node.y, current_node.x))
-                current_node = current_node.parent
-
-            path.append((start[0], start[1]))
-            path.reverse()
-
-            return path
-
-        counter += 1
-
-    return None
-
-
-def chain_rrt_star(new_node, nearest_nd):
-    new_node.parent = nearest_nd
-    nearest_nd.children.append(new_node)
-    new_node.cost = nearest_nd.cost + distance(new_node, nearest_nd)
-    return new_node
-
-
-def rewire_rrt_star(tree, new_node, max_radius):
-    for node in tree:
-        if distance(node, new_node) < max_radius:
-            new_cost = new_node.cost + distance(node, new_node)
-            if new_cost < node.cost:
-                node.parent = new_node
-                node.cost = new_cost
-
-
-def rewire_rrt_star_with_check(grid, tree, new_node, max_radius=36):
-    for node in tree:
-        if distance(node, new_node) < max_radius and not obstacle_collide_with_checks(grid, new_node, node):
-            new_cost = new_node.cost + distance(node, new_node)
-            if new_cost < node.cost:
-                node.parent = new_node
-                node.cost = new_cost
-
-
-def rrt_star(grid, start, goal, lim=100_000):
-    rows, cols = len(grid), len(grid[0])
-    counter = 0
-    moves = []
-    current_pos = NodeRRTStar(start[0], start[1])
-    #visited_locations = []
-
-    while counter < lim:
-        new_pose = random_rrt_pos_with_checks(NodeRRTStar(current_pos), rows, cols)
-
-        if new_pose is None:
-            continue
-
-        if obstacle_collide_with_checks(grid, new_pose, current_pos):
-            continue
-
-        nearest_nd = nearest_node(moves, new_pose)
-
-        new_pose.parent = nearest_nd
-
-        current_pos = new_pose
-
-        moves.append(new_pose)
-
-        #rewire_rrt_star(moves, current_pos, 2)
-        rewire_rrt_star_with_check(grid, moves, current_pos, 16)
-        # print(visited_locations)
-        # print(new_pose.x, " ", new_pose.y)
-        # print(nearest_nd.x, " ", nearest_nd.y)
-        # print("")
-        if goal[0] == new_pose.x and goal[1] == new_pose.y:
-            path = []
-            current_node = new_pose
-
-            while current_node is not None:
-                path.append((current_node.y, current_node.x))
-                current_node = current_node.parent
-            path.append((start[0], start[1]))
-            path.reverse()
-
-            return path
-
-        counter += 1
-
-    return None
-
-
-def my_rrt(grid, start, goal, lim=100_000):
-    rows, cols = len(grid), len(grid[0])
-    counter = 0
-    moves = []
-    current_pos = NodeRRTStar(start[0], start[1])
-    checked_combos = dict()
-    node_goal = NodeRRTStar(goal[0], goal[1])
-    # visited_locations = []
-
-    while counter < lim:
-        nb_of_new_poses = 0
-        nb_of_target_poses = 3
-        min_cost = float('inf')
-        new_pose = None
-
-        while nb_of_new_poses < nb_of_target_poses:
-            local_pose = random_rrt_pos_with_checks(NodeRRTStar(current_pos), rows, cols)
-
-            if local_pose is None:
-                continue
-            if obstacle_collide_with_checks(grid, local_pose, current_pos, checked_combos):
-                continue
-
-            nb_of_new_poses += 1
-            local_cost = distance(local_pose, node_goal)
-            if local_cost < min_cost:
-                min_cost = local_cost
-                new_pose = NodeRRTStar(local_pose.x, local_pose.y)
-
-        if new_pose is None:
-            continue
-
-        nearest_nd = nearest_node(moves, new_pose)
-
-        new_pose.parent = nearest_nd
-
-        current_pos = new_pose
-
-        moves.append(new_pose)
-
-        #rewire_rrt_star(moves, current_pos, 36)
-        rewire_rrt_star_with_check(grid, moves, current_pos, 16)
-        # print(visited_locations)
-        # print(new_pose.x, " ", new_pose.y)
-        # print(nearest_nd.x, " ", nearest_nd.y)
-        # print("")
-        if goal[0] == new_pose.x and goal[1] == new_pose.y:
-            path = []
-            current_node = new_pose
-
-            while current_node is not None:
-                path.append((current_node.y, current_node.x))
-                current_node = current_node.parent
-            path.append((start[0], start[1]))
-            path.reverse()
-
-            return path
-
-        counter += 1
-
-    return None
 
 
 def populate_map(lidar_x_data, lidar_y_data, robot, goal, resolution=0.25):
@@ -497,8 +141,8 @@ def plot_distance():
                                data_line[dict_index['field.distanceC']], data_line[dict_index['field.distanceD']],
                                data_line[dict_index['field.distanceE']], data_line[dict_index['field.distanceF']]]
             plt.scatter(range(1, 7), distance_vector, color='b', marker='o')
-            plt.xlim(0.5, 6.5)  # Adjust x-axis limits for better visualization
-            plt.ylim(0, 10)  # Adjust y-axis limits for better visualization
+            plt.xlim(0.5, 6.5)
+            plt.ylim(0, 10)
             plt.xlabel('Sensor Number')
             plt.ylabel('Distance (m)')
             plt.title('Ultrasonic Distance Sensor Readings')
@@ -563,29 +207,6 @@ def filter_fct(arr1, arr2, criteria=not_nan):
 
 def filter_arr(arr, criteria=not_inf):
     return arr[criteria(arr)]
-
-
-def bresenham_line(x0, y0, x1, y1):
-    points = []
-    dx = abs(x1 - x0)
-    dy = abs(y1 - y0)
-    sx = 1 if x0 < x1 else -1
-    sy = 1 if y0 < y1 else -1
-    err = dx - dy
-
-    while True:
-        points.append((x0, y0))
-        if x0 == x1 and y0 == y1:
-            break
-        e2 = 2 * err
-        if e2 > -dy:
-            err -= dy
-            x0 += sx
-        if e2 < dx:
-            err += dx
-            y0 += sy
-
-    return points
 
 
 def plot_complete_scan(path_scan1, path_scan2):
@@ -736,7 +357,6 @@ def plot_complete_scan(path_scan1, path_scan2):
             plt.ylabel('Y')
             plt.grid(True)
 
-            # Plot the filtered data if it's not empty
             if filtered_data.size > 0:
                 plt.subplot(1, 2, 2)
                 plt.scatter(filtered_data[:, 0], filtered_data[:, 1], c='r', s=2)
@@ -795,45 +415,73 @@ def plot_complete_scan(path_scan1, path_scan2):
             plt.title('Occupancy Map')
             plt.xlabel('X')
             plt.ylabel('Y')
+            plt.xlim(x_min, x_max)
+            plt.ylim(y_min, y_max)
 
-            path_astar = astar(map_matrix, (robot_point[0], robot_point[1]), [goal[1], goal[0]])
-            if path_astar is not None:
-                path_astar = np.array(path_astar)
-                plt.plot(path_astar[:, 1], path_astar[:, 0], color='lime', marker='o')
-                legend_labels.append("A* Path")
-                legend_handles.append(
-                    plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='lime', markersize=10, label='A* Path'))
-                print("A* Solution found")
+            test_astar = True
+            if test_astar:
+                path_astar = astar(map_matrix, (robot_point[0], robot_point[1]), [goal[1], goal[0]])
+                # noinspection PyTypeChecker
+                if path_astar is not None:
+                    nb_of_nodes, path_astar = path_astar
 
-            path_rrt = rrt(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
-            if path_rrt is not None:
-                path_rrt = np.array(path_rrt)
-                plt.plot(path_rrt[:, 1], path_rrt[:, 0], color='magenta', marker='o')
-                legend_labels.append("RRT Path")
-                legend_handles.append(
-                    plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='magenta', markersize=10,
-                               label='RRT Path'))
-                print("RRT Solution found")
+                    path_astar = np.array(path_astar)
+                    plt.plot(path_astar[:, 1], path_astar[:, 0], color='lime', marker='o')
+                    legend_labels.append("A* Path")
+                    # noinspection PyTypeChecker
+                    legend_handles.append(
+                        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='lime', markersize=10, label='A* Path'))
+                    print(f"A* Solution found with {nb_of_nodes} searches")
+                else:
+                    print(f"A* Solution isn't found")
 
-            path_rrt_star = rrt_star(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
-            if path_rrt_star is not None:
-                path_rrt_star = np.array(path_rrt_star)
-                plt.plot(path_rrt_star[:, 1], path_rrt_star[:, 0], color=(10 / 255, 155 / 255, 255 // 255), marker='o')
-                legend_labels.append("RRT* Path")
-                legend_handles.append(
-                    plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=(10 / 255, 155 / 255, 255 / 255),
-                               markersize=10, label='RRT* Path'))
-                print("RRT* Solution found")
+            test_rrt = True
+            if test_rrt:
+                path_rrt = rrt(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
+                if path_rrt is not None:
+                    nb_of_nodes, path_rrt = path_rrt
+                    path_rrt = np.array(path_rrt)
+                    plt.plot(path_rrt[:, 1], path_rrt[:, 0], color='magenta', marker='o')
+                    legend_labels.append("RRT Path")
+                    # noinspection PyTypeChecker
+                    legend_handles.append(
+                        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='magenta', markersize=10,
+                                   label='RRT Path'))
+                    print(f"RRT Solution found with {nb_of_nodes} searches")
+                else:
+                    print(f"RRT Solution isn't found")
 
-            path_my_rrt = my_rrt(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
-            if path_my_rrt is not None:
-                path_my_rrt = np.array(path_my_rrt)
-                plt.plot(path_my_rrt[:, 1], path_my_rrt[:, 0], color='r', marker='o')
-                legend_labels.append("A/RRT* Path")
-                legend_handles.append(
-                    plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='r',
-                               markersize=10, label='A/RRT* Path'))
-                print("My A/RRT Solution found")
+            test_rrt_star = False
+            if test_rrt_star:
+                path_rrt_star = rrt_star(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
+                if path_rrt_star is not None:
+                    nb_of_nodes, path_rrt_star = path_rrt_star
+                    path_rrt_star = np.array(path_rrt_star)
+                    plt.plot(path_rrt_star[:, 1], path_rrt_star[:, 0], color=(10 / 255, 155 / 255, 255 // 255), marker='o')
+                    legend_labels.append("RRT* Path")
+                    # noinspection PyTypeChecker
+                    legend_handles.append(
+                        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=(10 / 255, 155 / 255, 255 / 255),
+                                   markersize=10, label='RRT* Path'))
+                    print(f"RRT* Solution found with {nb_of_nodes} searches")
+                else:
+                    print(f"RRT* Solution isn't found")
+
+            test_my_rrt = True
+            if test_my_rrt:
+                path_my_rrt = my_rrt(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
+                if path_my_rrt is not None:
+                    nb_of_nodes, path_my_rrt = path_my_rrt
+                    path_my_rrt = np.array(path_my_rrt)
+                    plt.plot(path_my_rrt[:, 1], path_my_rrt[:, 0], color='r', marker='o')
+                    legend_labels.append("A/RRT* Path")
+                    # noinspection PyTypeChecker
+                    legend_handles.append(
+                        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='r',
+                                   markersize=10, label='A/RRT* Path'))
+                    print(f"My A/RRT Solution found with {nb_of_nodes} searches")
+                else:
+                    print(f"My A/RRT Solution isn't found")
 
             plt.legend(legend_handles, legend_labels, loc='upper right')
 
@@ -848,24 +496,24 @@ def plot_complete_scan(path_scan1, path_scan2):
 
 
 def plot_scan(*paths, nbOfRanges=1681):
-    def draw_binary_frame():
-        dists = [float(r) for r in line[:-1].split(',')[start_ranges_offset:start_ranges_offset + nbOfRanges]]
-
-        x = [center_x + dists[idx_x] * cos_list[idx_x] for idx_x in range(nbOfRanges)]
-        y = [center_y + dists[idx_y] * sin_list[idx_y] for idx_y in range(nbOfRanges)]
-
-        occupancy_matrix = populate_map(lidar_x_data=x, lidar_y_data=y, resolution=0.10)
-
-        plt.imshow(occupancy_matrix, cmap='binary', origin='lower')
-
-        plt.title('Occupancy Map')
-        plt.xlabel('X')
-        plt.ylabel('Y')
-
-        path_astar = astar(occupancy_matrix, (0, 0), (30, 25))
-        if path_astar:
-            path_astar = np.array(path_astar)
-            plt.plot(path_astar[:, 1], path_astar[:, 0], color='lime', marker='o')
+    # def draw_binary_frame():
+    #     dists = [float(r) for r in line[:-1].split(',')[start_ranges_offset:start_ranges_offset + nbOfRanges]]
+    #
+    #     x = [center_x + dists[idx_x] * cos_list[idx_x] for idx_x in range(nbOfRanges)]
+    #     y = [center_y + dists[idx_y] * sin_list[idx_y] for idx_y in range(nbOfRanges)]
+    #
+    #     occupancy_matrix = populate_map(lidar_x_data=x, lidar_y_data=y, resolution=0.10)
+    #
+    #     plt.imshow(occupancy_matrix, cmap='binary', origin='lower')
+    #
+    #     plt.title('Occupancy Map')
+    #     plt.xlabel('X')
+    #     plt.ylabel('Y')
+    #
+    #     path_astar = astar(occupancy_matrix, (0, 0), (30, 25))
+    #     if path_astar:
+    #         path_astar = np.array(path_astar)
+    #         plt.plot(path_astar[:, 1], path_astar[:, 0], color='lime', marker='o')
 
     def draw_frame():
         dists = [float(r) for r in line[:-1].split(',')[start_ranges_offset:start_ranges_offset + nbOfRanges]]
@@ -890,7 +538,7 @@ def plot_scan(*paths, nbOfRanges=1681):
     header_data = data[paths[0]][0][:-1].split(',')
 
     start_ranges_offset = header_data.index("field.ranges0")
-    start_intensity_offset = start_ranges_offset + nbOfRanges
+    # start_intensity_offset = start_ranges_offset + nbOfRanges
 
     dict_scan = dict()
 
@@ -964,14 +612,6 @@ def main_test():
     # plt.show()
     # for sn in cache_sin.keys():
     #    print(sn)
-
-
-class MapState(Enum):
-    ROBOT = 1.0
-    FREE = 2.0
-    OBSTACLE = 3.0
-    EXTENDED_OBSTACLE = 4.0
-    GOAL = 5.0
 
 
 if __name__ == '__main__':
