@@ -66,11 +66,9 @@ def genetic_algorithm(population_size, move_length, generations, mutation_rate, 
         fitness_scores = []
         new_population = []
 
-        # Evaluate fitness scores in parallel
         with multiprocessing.Pool() as pool:
             fitness_scores = pool.starmap(parallel_fitness_evaluation, [(individual, initial_grid) for individual in population])
 
-        # Find the best solution in the current population
         max_fitness_index = np.argmax(fitness_scores)
         if fitness_scores[max_fitness_index] > best_fitness:
             best_moves = population[max_fitness_index]
@@ -79,7 +77,6 @@ def genetic_algorithm(population_size, move_length, generations, mutation_rate, 
             if best_fitness > 2500:
                 return best_moves, best_fitness
 
-        # Create a new population using selection, crossover, and mutation
         for _ in range(population_size // 2):
             parent1, parent2 = select_parents(population, fitness_scores)
             child1 = crossover(parent1, parent2)
@@ -211,7 +208,7 @@ def def_5x5():
     matrix_5x5[3, 1] = MapState.OBSTACLE.value
     matrix_5x5[4, 4] = MapState.GOAL.value
 
-    return  matrix_5x5
+    return matrix_5x5
 
 
 if __name__ == "__main__":
@@ -220,8 +217,8 @@ if __name__ == "__main__":
 
     print_map(matrix)
 
-    best_moves_, best_fitness_ = genetic_algorithm(population_size=1000, move_length=10, generations=1000,
-                                                   mutation_rate=0.1, grid=matrix)
+    best_moves_, best_fitness_ = genetic_algorithm(population_size=1000, move_length=15, generations=100,
+                                                   mutation_rate=0.25, grid=matrix)
     print("Best moves:", best_moves_)
     print("Best fitness:", best_fitness_)
 

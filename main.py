@@ -467,7 +467,7 @@ def plot_complete_scan(path_scan1, path_scan2):
                 else:
                     print(f"RRT* Solution isn't found")
 
-            test_my_rrt = True
+            test_my_rrt = False
             if test_my_rrt:
                 path_my_rrt = my_rrt(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
                 if path_my_rrt is not None:

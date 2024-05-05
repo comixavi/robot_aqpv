@@ -182,13 +182,18 @@ def distance(node1, node2):
 def nearest_node(vertices, new_node):
     min_distance = float('inf')
     nearest_nd = None
-    dist = min_distance
+    min_path = None
+
     for vertex in vertices:
-        dist = distance(vertex, new_node)
+        loc_path = bresenham_line(vertex.x, vertex.y, new_node.x, new_node.y)
+        dist = len(loc_path)
+
         if dist < min_distance and dist != 0:
             min_distance = dist
             nearest_nd = vertex
-    return dist, nearest_nd
+            min_path = loc_path
+
+    return min_distance, nearest_nd, min_path
 
 
 def nearest_nodes(vertices, new_node, max_distance=2):
@@ -203,12 +208,13 @@ def nearest_nodes(vertices, new_node, max_distance=2):
 def rrt(grid, start, goal, lim=10_000):
     rows, cols = len(grid), len(grid[0])
     counter = 0
+    max_dist = 6
 
     current_pos = NodeRRT(start[0], start[1])
     moves = [current_pos]
 
     while counter < lim:
-        new_pose = random_rrt_pos(NodeRRT(current_pos), rows, cols, 2)
+        new_pose = random_rrt_pos(NodeRRT(current_pos), rows, cols, max_dist, True)
 
         if new_pose is None:
             continue
@@ -216,9 +222,25 @@ def rrt(grid, start, goal, lim=10_000):
         if obstacle_collide(grid, new_pose):
             continue
 
-        dist, nearest_nd = nearest_node(moves, new_pose)
+        dist, nearest_nd, points = nearest_node(moves, new_pose)
 
-        if dist == 0 or dist > 2:
+        if dist == 0:
+            continue
+
+        if dist > max_dist:
+            # points = bresenham_line(nearest_nd.x, nearest_nd.y, new_pose.x, new_pose.y)
+            new_pose.x, new_pose.y = points[max_dist]
+            points = points[0:max_dist+1]
+
+        break_key = False
+        for point in points:
+            x = point[0]
+            y = point[1]
+            if grid[y, x] == MapState.OBSTACLE.value or grid[y, x] == MapState.EXTENDED_OBSTACLE.value:
+                break_key = True
+                break
+
+        if break_key:
             continue
 
         new_pose.parent = nearest_nd
@@ -262,10 +284,10 @@ def rewire_rrt_star(tree, new_node, max_radius):
                 new_node.cost = new_cost
 
 
-def rewire_rrt_star_with_check(grid, tree, new_node, max_radius=36):
+def rewire_rrt_star_with_check(grid, tree, new_node, max_radius=36, check_fct=obstacle_collide_bresenham_line):
     flag = False
     for node in tree:
-        if distance(node, new_node) < max_radius and not obstacle_collide_with__checks(grid, new_node, node):
+        if distance(node, new_node) < max_radius and not check_fct(grid, new_node, node): #obstacle_collide_with__checks
             new_cost = new_node.cost + distance(node, new_node)
             if new_cost < node.cost:
                 flag = True
@@ -275,30 +297,35 @@ def rewire_rrt_star_with_check(grid, tree, new_node, max_radius=36):
     return flag
 
 
-def rrt_star(grid, start, goal, lim=10_000):
+def rrt_star(grid, start, goal, lim=10_000, check_fct=obstacle_collide_bresenham_line):
     rows, cols = len(grid), len(grid[0])
     counter = 0
     current_pos = NodeRRTStar(start[0], start[1])
     moves = [current_pos]
+    max_radius = 36
+    max_dist = 6
 
     while counter < lim:
-        new_pose = random_rrt_pos(NodeRRTStar(current_pos), rows, cols, 25, True)
+        new_pose = random_rrt_pos(NodeRRTStar(current_pos), rows, cols, max_dist, True)
 
         if new_pose is None:
             continue
 
-        if obstacle_collide_with__checks(grid, new_pose, current_pos):
+        if check_fct(grid, new_pose, current_pos):
             continue
 
-        _, nearest_nd = nearest_node(moves, new_pose)
-        #
-        if obstacle_collide_with__checks(grid, new_pose, nearest_nd):
-            continue
+        dist, nearest_nd, points = nearest_node(moves, new_pose)
+
+        if dist > max_dist:
+            new_pose.x, new_pose.y = points[max_dist - 1]
+
+        # if check_fct(grid, new_pose, nearest_nd):
+        #    continue
 
         chain_rrt_star(new_pose, nearest_nd)
 
         # rewire_rrt_star(moves, current_pos, 2)
-        rewire_rrt_star_with_check(grid, moves, new_pose)
+        rewire_rrt_star_with_check(grid, moves, new_pose, max_radius, check_fct)
         moves.append(new_pose)
         current_pos = new_pose
 
