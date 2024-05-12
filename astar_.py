@@ -35,6 +35,7 @@ def astar(grid, start, goal, lim=10_000):
 
         if current[0] == goal[0] and current[1] == goal[1]:
             return counter, reconstruct_path(came_from, current)
+
         for dx, dy in possible_moves:
             neighbor = (current[0] + dx, current[1] + dy)
 

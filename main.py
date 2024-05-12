@@ -9,7 +9,7 @@ from math import sin, cos, pi
 from sklearn.cluster import DBSCAN
 
 from astar_ import astar
-from rrt_ import rrt, rrt_star, my_rrt
+from rrt_ import rrt, rrt_connect, rrt_star, rrt_div
 from mapstate_ import MapState
 from util_ import bresenham_line
 
@@ -378,7 +378,7 @@ def plot_complete_scan(path_scan1, path_scan2):
 
             plt.tight_layout()
 
-        continuous_time = False
+        continuous_time = True
         if continuous_time:
             plt.plot([robot.corner1[0], robot.corner2[0], robot.corner3[0], robot.corner4[0]],
                      [robot.corner1[1], robot.corner2[1], robot.corner3[1], robot.corner4[1]], 'b-')
@@ -435,7 +435,7 @@ def plot_complete_scan(path_scan1, path_scan2):
                 else:
                     print(f"A* Solution isn't found")
 
-            test_rrt = True
+            test_rrt = False
             if test_rrt:
                 path_rrt = rrt(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
                 if path_rrt is not None:
@@ -450,6 +450,22 @@ def plot_complete_scan(path_scan1, path_scan2):
                     print(f"RRT Solution found with {nb_of_nodes} searches")
                 else:
                     print(f"RRT Solution isn't found")
+
+            test_rrt_connect = False
+            if test_rrt_connect:
+                path_rrt_connect = rrt_connect(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
+                if path_rrt_connect is not None:
+                    nb_of_nodes, path_rrt_connect = path_rrt_connect
+                    path_rrt_connect = np.array(path_rrt_connect)
+                    plt.plot(path_rrt_connect[:, 1], path_rrt_connect[:, 0], color='magenta', marker='o')
+                    legend_labels.append("RRT Path")
+                    # noinspection PyTypeChecker
+                    legend_handles.append(
+                        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='magenta', markersize=10,
+                                   label='RRT Path'))
+                    print(f"RRT-Connect Solution found with {nb_of_nodes} searches")
+                else:
+                    print(f"RRT-Connect Solution isn't found")
 
             test_rrt_star = False
             if test_rrt_star:
@@ -467,13 +483,13 @@ def plot_complete_scan(path_scan1, path_scan2):
                 else:
                     print(f"RRT* Solution isn't found")
 
-            test_my_rrt = False
-            if test_my_rrt:
-                path_my_rrt = my_rrt(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
-                if path_my_rrt is not None:
-                    nb_of_nodes, path_my_rrt = path_my_rrt
-                    path_my_rrt = np.array(path_my_rrt)
-                    plt.plot(path_my_rrt[:, 1], path_my_rrt[:, 0], color='r', marker='o')
+            test_rrt_div = False
+            if test_rrt_div:
+                path_rrt_div = rrt_div(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
+                if path_rrt_div is not None:
+                    nb_of_nodes, path_rrt_div = path_rrt_div
+                    path_rrt_div = np.array(path_rrt_div)
+                    plt.plot(path_rrt_div[:, 1], path_rrt_div[:, 0], color='r', marker='o')
                     legend_labels.append("A/RRT* Path")
                     # noinspection PyTypeChecker
                     legend_handles.append(
