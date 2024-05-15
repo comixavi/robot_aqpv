@@ -1,8 +1,9 @@
-import time
 from enum import Enum
 from mapstate_ import MapState
 from random import randint
-import multiprocessing
+
+import time
+# import multiprocessing
 import numpy as np
 
 
@@ -29,8 +30,8 @@ def mutate(individual, mutation_rate):
 
 
 def parallel_fitness_evaluation(individual, initial_grid):
-    _, fitness = play_move(individual, np.copy(initial_grid))
-    return fitness
+    state, fitness = play_move(individual, np.copy(initial_grid))
+    return state, fitness
 
 
 def select_parents(population, fitness_scores):
@@ -55,27 +56,48 @@ def select_parents(population, fitness_scores):
     return parent1, parent2
 
 
-def genetic_algorithm(population_size, move_length, generations, mutation_rate, grid):
+def distance(node1, node2):
+    return np.sqrt((node1[0] - node2[0]) ** 2 + (node1[1] - node2[1]) ** 2)
+
+
+def total_distance(points):
+    total = 0
+    for i in range(len(points) - 1):
+        total += distance(points[i], points[i + 1])
+    return total
+
+
+def genetic_algorithm(population_size, move_length, generations, mutation_rate, grid, max_time):
     population = create_population(population_size, move_length)
-    initial_grid = np.copy(grid)  # Make a copy of the initial grid
+    initial_grid = np.copy(grid)
 
     best_moves = None
-    best_fitness = float('-inf')  # Initialize with negative infinity
+    best_fitness = float('-inf')
+    t0 = time.time_ns()
 
     for generation in range(generations):
+        if time.time_ns() - t0 > max_time:
+            return None
+
         fitness_scores = []
+        states = []
         new_population = []
 
-        with multiprocessing.Pool() as pool:
-            fitness_scores = pool.starmap(parallel_fitness_evaluation, [(individual, initial_grid) for individual in population])
+        # with multiprocessing.Pool() as pool:
+        #     fitness_scores = pool.starmap(parallel_fitness_evaluation, [(individual, initial_grid) for individual in population])
+        for individual in population:
+            res = parallel_fitness_evaluation(individual, initial_grid)
+            fitness_scores.append(res[1])
+            states.append(res[0])
+        # fitness_scores = [parallel_fitness_evaluation(individual, initial_grid) for individual in population]
 
         max_fitness_index = np.argmax(fitness_scores)
         if fitness_scores[max_fitness_index] > best_fitness:
             best_moves = population[max_fitness_index]
             best_fitness = fitness_scores[max_fitness_index]
 
-            if best_fitness > 2500:
-                return best_moves, best_fitness
+            if best_fitness > 2500 and states[max_fitness_index] == PlayRet.SCORE:
+                return generations, best_moves, time.time_ns() - t0, total_distance(best_moves)
 
         for _ in range(population_size // 2):
             parent1, parent2 = select_parents(population, fitness_scores)
@@ -85,7 +107,7 @@ def genetic_algorithm(population_size, move_length, generations, mutation_rate, 
 
         population = new_population
 
-    return best_moves, best_fitness
+    return None if best_fitness < 2500 else generations, best_moves, time.time_ns() - t0, total_distance(best_moves)
 
 
 def play_move(moves, grid, draw=False):
@@ -154,7 +176,7 @@ def play_move(moves, grid, draw=False):
     return PlayRet.MISS, fitness
 
 
-def print_map(matrix):
+def print_map(mtx):
     state_symbols = {
         MapState.ROBOT.value: '🤖',
         MapState.FREE.value: '⬜',
@@ -163,7 +185,7 @@ def print_map(matrix):
         MapState.GOAL.value: '🎯'
     }
 
-    for row in matrix:
+    for row in mtx:
         for cell in row:
             print(state_symbols.get(cell, ' '), end=' ')
         print()
@@ -212,20 +234,15 @@ def def_5x5():
 
 
 if __name__ == "__main__":
-    start_time = time.time()
     matrix = def_5x5()
 
     print_map(matrix)
 
     best_moves_, best_fitness_ = genetic_algorithm(population_size=1000, move_length=15, generations=100,
-                                                   mutation_rate=0.25, grid=matrix)
+                                                   mutation_rate=0.25, grid=matrix, max_time=10_000_000)
     print("Best moves:", best_moves_)
     print("Best fitness:", best_fitness_)
 
     print_map(matrix)
     play_move(best_moves_, grid=matrix, draw=True)
     print_map(matrix)
-
-    end_time = time.time()
-    execution_time = end_time - start_time
-    print("Execution time:", execution_time, "seconds")

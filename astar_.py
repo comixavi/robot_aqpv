@@ -5,6 +5,17 @@ from mapstate_ import MapState
 import numpy as np
 
 
+def distance(node1, node2):
+    return np.sqrt((node1[0] - node2[0]) ** 2 + (node1[1] - node2[1]) ** 2)
+
+
+def total_distance(points):
+    total = 0
+    for i in range(len(points) - 1):
+        total += distance(points[i], points[i + 1])
+    return total
+
+
 def heuristic_cost_estimate(current, goal):
     return np.sqrt((current[0] - goal[0]) ** 2 + (current[1] - goal[1]) ** 2)
 
@@ -18,7 +29,7 @@ def reconstruct_path(came_from, current):
     return path[::-1]
 
 
-def astar(grid, start, goal, lim=10_000, max_t=10):
+def astar(grid, start, goal, lim=10_000, max_t=10_000_000):
     rows, cols = len(grid), len(grid[0])
 
     open_set = []
@@ -28,16 +39,17 @@ def astar(grid, start, goal, lim=10_000, max_t=10):
     g_score = {start: 0}
     f_score = {start: heuristic_cost_estimate(start, goal)}
     counter = 0
-    start_time = time.time()
+    start_time = time.time_ns()
 
-    while open_set and counter < lim or max_t > time.time() - start_time:
+    while open_set and counter < lim or max_t > time.time_ns() - start_time:
         _, current = heapq.heappop(open_set)
         possible_moves = [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (-1, 1), (-1, -1), (1, -1)]
 
         counter += 1
 
         if current[0] == goal[0] and current[1] == goal[1]:
-            return counter, reconstruct_path(came_from, current), time.time() - start_time
+            path = reconstruct_path(came_from, current)
+            return counter, path, time.time() - start_time, total_distance(path)
 
         for dx, dy in possible_moves:
             neighbor = (current[0] + dx, current[1] + dy)

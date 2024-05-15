@@ -1,16 +1,20 @@
 import random
 import time
-from hmac import new
+from multiprocessing import freeze_support
 
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
 from matplotlib.colors import ListedColormap, BoundaryNorm
-
-import mapstate_
+from datetime import datetime
 from mapstate_ import MapState
 from util_ import bresenham_line
 from astar_ import astar
+from genetic_ import genetic_algorithm
+
+
+# from xlsxwriter import Workbook
 
 
 class NodeRRT:
@@ -208,6 +212,13 @@ def distance(node1, node2):
         return np.sqrt((node1[0] - node2[0]) ** 2 + (node1[1] - node2[1]) ** 2)
 
 
+def total_distance(points):
+    total = 0
+    for i in range(len(points) - 1):
+        total += distance(points[i], points[i + 1])
+    return total
+
+
 def nearest_node(vertices, new_node_x, new_node_y):
     min_distance = float('inf')
     nearest_nd = None
@@ -241,9 +252,9 @@ def rrt(grid, start, goal, lim=1_000, max_t=10):
 
     current_pos = NodeRRT(*start)
     moves = [current_pos]
-    start_time = time.time()
+    start_time = time.time_ns()
 
-    while counter < lim and time.time() - start_time < max_t:
+    while counter < lim and time.time_ns() - start_time < max_t:
         counter += 1
 
         new_pose = random_pos(rows, cols)
@@ -307,7 +318,7 @@ def rrt(grid, start, goal, lim=1_000, max_t=10):
                         if grid[x, y] == MapState.OBSTACLE.value or grid[x, y] == MapState.EXTENDED_OBSTACLE.value:
                             retry = True
                 if not retry:
-                    return counter, final_pt, time.time() - start_time
+                    return counter, final_pt, time.time_ns() - start_time, total_distance(final_pt)
 
     return None
 
@@ -318,9 +329,9 @@ def rrt_connect(grid, start, goal, lim=1_000, max_t=10):
     trees = [tr1, tr2]
     # max_dist = 10
     counter = 0
-    start_time = time.time()
+    start_time = time.time_ns()
 
-    while counter < lim and time.time() - start_time < max_t:
+    while counter < lim and time.time_ns() - start_time < max_t:
         counter += 1
 
         for tree in trees:
@@ -376,7 +387,7 @@ def rrt_connect(grid, start, goal, lim=1_000, max_t=10):
                     pt = reconstruct_path(grid, other_nearest, new_node)
 
                 if pt is not None:
-                    return counter * 2, pt, time.time() - start_time
+                    return counter * 2, pt, time.time_ns() - start_time, total_distance(pt)
                 else:
                     tr1 = [NodeRRTStar(*start)]
                     tr2 = [NodeRRTStar(*goal)]
@@ -492,9 +503,9 @@ def nearest_node_star(tree, x, y):
 def rrt_star(grid, start, goal, lim=1000, max_dist=10, max_t=10):
     tree = [NodeRRTStar(*start)]
     counter = 0
-    start_time = time.time()
+    start_time = time.time_ns()
 
-    while counter < lim and time.time() - start_time < max_t:
+    while counter < lim and time.time_ns() - start_time < max_t:
         counter += 1
 
         rand_x, rand_y = random_rrt_pos_star(len(grid), len(grid[0]))
@@ -511,7 +522,7 @@ def rrt_star(grid, start, goal, lim=1000, max_dist=10, max_t=10):
         if (new_node.x, new_node.y) == goal:
             rec_path = construct_path_star(grid, new_node)
             if rec_path is not None:
-                return counter, rec_path, time.time() - start_time
+                return counter, rec_path, time.time_ns() - start_time, total_distance(rec_path)
             else:
                 tree = [NodeRRTStar(*start)]
 
@@ -562,9 +573,9 @@ def rrt_div(grid, start, goal, lim=1_000, max_t=10):
     checked_combos = dict()
     moves = [current_pos]
 
-    start_time = time.time()
+    start_time = time.time_ns()
 
-    while counter < lim and time.time() - start_time < max_t:
+    while counter < lim and time.time_ns() - start_time < max_t:
         min_cost = float('inf')
         new_pose = None
 
@@ -625,7 +636,7 @@ def rrt_div(grid, start, goal, lim=1_000, max_t=10):
                         retry = True
 
             if not retry:
-                return counter, final_pt, time.time() - start_time
+                return counter, final_pt, time.time_ns() - start_time, total_distance(final_pt)
             else:
                 current_pos = NodeRRTStar(start[0], start[1])
                 moves = [current_pos]
@@ -652,9 +663,9 @@ def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
 
     obs_fct = obstacle_collide_bresenham_line
 
-    start_time = time.time()
+    start_time = time.time_ns()
 
-    while counter < lim and time.time() - start_time < max_t:
+    while counter < lim and time.time_ns() - start_time < max_t:
         counter += 1
 
         local_pose = random_pos_fast(counter_close, goal, rows, cols)
@@ -711,6 +722,7 @@ def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
 
                 current_node = current_node.parent
 
+            cost = current_node.cost
             path.append((start[0], start[1]))
             path.reverse()
 
@@ -730,7 +742,7 @@ def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
             final_pt.append(goal)
 
             if not retry:
-                return counter, final_pt, time.time() - start_time
+                return counter, final_pt, time.time_ns() - start_time, total_distance(final_pt)
             else:
                 current_pos = NodeRRTStar(start[0], start[1])
                 counter_close = 0
@@ -740,9 +752,39 @@ def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
     return None
 
 
-def plot_grid(grid, path, text):
+def generate_grid_with_obstacles(num_obstacles):
+    grid = np.full((20, 20), MapState.FREE.value)
+
+    def can_place_obstacle():
+        if y + length > 20:
+            return False
+        for i in range(length):
+            if grid[x, y + i] != MapState.FREE.value:
+                return False
+            if x > 0 and grid[x - 1, y + i] == MapState.OBSTACLE.value:
+                return False
+            if x < 19 and grid[x + 1, y + i] == MapState.OBSTACLE.value:
+                return False
+        return True
+
+    for _ in range(num_obstacles):
+        placed = False
+        while not placed:
+            x = random.randint(0, 19)
+            y = random.randint(0, 19)
+            length = random.randint(2, 10)
+
+            if can_place_obstacle():
+                for i in range(length):
+                    grid[x, y + i] = MapState.OBSTACLE.value
+                placed = True
+
+    return grid
+
+
+def plot_blank_grid(grid):
     colors = ['blue', 'white', 'black', (0.6, 0.6, 0.6), 'green']
-    Ts = 1 / 24
+    Ts = 100
     map_cmap = ListedColormap(colors, name='color_map')
     bounds = [i + 1 for i in range(len(colors) + 1)]
     map_norm = BoundaryNorm(bounds, len(bounds) - 1)
@@ -756,24 +798,51 @@ def plot_grid(grid, path, text):
     legend_handles = [plt.Rectangle((0, 0), 1, 1,
                                     color=map_cmap(map_norm(i + 1))) for i in range(len(legend_labels))]
 
-    plt.title('Occupancy Map')
+    plt.title('Robot Environment')
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    plt.xlim(x_min, x_max)
+    plt.ylim(y_min, y_max)
+
+    plt.xlim(x_min, x_max)
+    plt.ylim(y_min, y_max)
+    plt.draw()
+    plt.grid()
+    plt.tight_layout()
+    plt.pause(Ts)
+    plt.clf()
+
+
+def plot_grid(grid, path, text):
+    colors = ['blue', 'white', 'black', (0.6, 0.6, 0.6), 'green']
+    Ts = 1 / 24
+    map_cmap = ListedColormap(colors, name='color_map')
+    bounds = [i + 1 for i in range(len(colors) + 1)]
+    map_norm = BoundaryNorm(bounds, len(bounds) - 1)
+
+    y_max, x_max = len(grid), len(grid[0])
+    x_min = -1
+    y_min = -1
+
+    plt.imshow(grid, cmap=map_cmap, norm=map_norm, interpolation='none')
+    legend_labels = [state.name for state in MapState]
+    legend_handles = [plt.Rectangle((0, 0), 1, 1,
+                                    color=map_cmap(map_norm(i + 1))) for i in range(len(legend_labels))]
+
+    plt.title('Robot Environment')
     plt.xlabel('X')
     plt.ylabel('Y')
     plt.xlim(x_min, x_max)
     plt.ylim(y_min, y_max)
 
     if path is not None:
-        nb_of_nodes, path_astar, times = path
+        nb_of_nodes, path_astar, times, costs = path
 
         path_astar = np.array(path_astar)
         plt.plot(path_astar[:, 1], path_astar[:, 0], color='lime', marker='o')
         legend_labels.append(f"{text} Path")
-        # noinspection PyTypeChecker
         legend_handles.append(
             plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='lime', markersize=10, label=f'{text} Path'))
-        # print(f"{text} Solution found with {nb_of_nodes} searches")
-    # else:
-        # print(f"{text} Solution isn't found")
 
     plt.xlim(x_min, x_max)
     plt.ylim(y_min, y_max)
@@ -785,30 +854,22 @@ def plot_grid(grid, path, text):
 
 
 def print_statistics(data, title):
-    # Convert data to numpy array for efficient computation
     data_array = np.array(data)
 
-    # Count the number of np.nan values (fails) and display them
     print(f"Method: {title}")
 
     nan_count = np.isnan(data_array).sum()
     print(f"Number of fails: {nan_count}")
 
-    # Filter out np.nan values for accurate statistical calculations
     clean_data = data_array[~np.isnan(data_array)]
 
-    # Proceed with calculations if there is clean data available
     if clean_data.size > 0:
-        # Calculate mean
         mean = np.mean(clean_data)
 
-        # Calculate standard deviation
         std_dev = np.std(clean_data)
 
-        # Calculate median
         median = np.median(clean_data)
 
-        # Find minimum and maximum values
         min_val = np.min(clean_data)
         max_val = np.max(clean_data)
 
@@ -823,96 +884,424 @@ def print_statistics(data, title):
     print("")
 
 
+def read_from_excel(filename):
+    df = pd.read_excel(filename, header=None, sheet_name='Results')
+
+    results = {}
+    current_method = None
+    category = None
+
+    for index, row in df.iterrows():
+        if pd.isna(row[0]):
+            continue
+
+        if pd.isna(row[1]):
+            current_method = row[0]
+            results[current_method] = {}
+        elif current_method:
+            category = row[0]
+            values = row[1:].dropna().tolist()
+            values = [None if v == 'NaN' else v for v in values]
+            results[current_method][category] = values
+
+    return results
+
+
+def calculate_number_of_turns(path):
+    turns = 0
+    if len(path) < 3:
+        return turns
+
+    for i in range(1, len(path) - 1):
+        dx1 = path[i][0] - path[i - 1][0]
+        dy1 = path[i][1] - path[i - 1][1]
+        dx2 = path[i + 1][0] - path[i][0]
+        dy2 = path[i + 1][1] - path[i][1]
+
+        if dx1 != dx2 or dy1 != dy2:
+            turns += 1
+
+    return turns
+
+
+def calculate_smoothness(path):
+    angles = []
+    if len(path) < 3:
+        return 0
+
+    for i in range(1, len(path) - 1):
+        dx1 = path[i][0] - path[i - 1][0]
+        dy1 = path[i][1] - path[i - 1][1]
+        dx2 = path[i + 1][0] - path[i][0]
+        dy2 = path[i + 1][1] - path[i + 1][1]
+
+        dot_product = dx1 * dx2 + dy1 * dy2
+        magnitude1 = np.sqrt(dx1 ** 2 + dy1 ** 2)
+        magnitude2 = np.sqrt(dx2 ** 2 + dy2 ** 2)
+
+        if magnitude1 * magnitude2 == 0:
+            continue
+
+        angle = np.arccos(dot_product / (magnitude1 * magnitude2))
+        angles.append(angle)
+
+    return np.mean(angles) if angles else 0
+
+
+def plot_comparison(methods, path_lengths, number_of_turns, smoothness, execution_times, energy_costs, fail_nb,
+                    criteria):
+    data = [
+        path_lengths,
+        number_of_turns,
+        smoothness,
+        execution_times,
+        energy_costs,
+        fail_nb
+    ]
+
+    num_methods = len(methods)
+    num_criteria = len(criteria)
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    bar_width = 0.15
+    index = np.arange(num_methods)
+
+    for i in range(num_criteria):
+        ax.bar(index + i * bar_width, data[i], bar_width, label=criteria[i])
+
+    ax.set_xlabel('Methods')
+    ax.set_ylabel('Values')
+    ax.set_title('Comparison of Methods by Various Criteria')
+    ax.set_xticks(index + bar_width * (num_criteria - 1) / 2)
+    ax.set_xticklabels(methods, rotation=45, ha='right')
+    ax.legend()
+
+    plt.tight_layout()
+    plt.show()
+
+
+def eliminate_duplicates(lst):
+    if not lst:
+        return []
+
+    result = [lst[0]]
+    last_element = lst[0]
+
+    for i in range(1, len(lst)):
+        if lst[i] != last_element:
+            result.append(lst[i])
+        last_element = lst[i]
+
+    return result
+
+
 def main():
-    shape_lines = 5
-    shape_col = 5
-    grid = np.full((shape_lines, shape_col), MapState.FREE.value, dtype=int)
+    simple_grid = False
+    random_grid = False
+    lidar_grid = True
+    grid = []
 
-    robot_pos = (0, 0)
-    obstacles = [(3, 3), (2, 2)]
-    goal = (4, 4)
+    if simple_grid:
+        shape_lines = 5
+        shape_col = 5
+        grid = np.full((shape_lines, shape_col), MapState.FREE.value, dtype=int)
+        robot_pos = (0, 0)
+        obstacles = [(3, 3), (2, 2)]
+        goal = (4, 4)
 
-    grid[robot_pos] = MapState.ROBOT.value
-    grid[goal] = MapState.GOAL.value
+        grid[robot_pos] = MapState.ROBOT.value
+        grid[goal] = MapState.GOAL.value
 
-    for obstacle in obstacles:
-        grid[obstacle] = MapState.OBSTACLE.value
+        for obstacle in obstacles:
+            grid[obstacle] = MapState.OBSTACLE.value
+
+    if lidar_grid:
+        robot_pos = (0, 0)
+        goal = (17, 17)
+
+        grid = [
+            [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 3, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 3, 3, 3, 2, 2, 3, 3, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 3, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 3, 3, 2, 3, 2, 2, 2, 2, 2, 3, 3, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 2, 2, 2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 3, 3, 2, 2, 2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 3, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 3, 3, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 3, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 3, 2, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 2, 2, 2, 2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 2, 2, 2, 2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 3, 2, 3, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 3, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2],
+            [2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2],
+            [2, 2, 2, 2, 2, 3, 2, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 3, 3, 2, 2, 2, 3, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 2, 3, 2, 3, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+            [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+             2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+        ]
+
+        grid[0][0] = MapState.ROBOT.value
+        grid[17][17]= MapState.ROBOT.value
+
+
+    # grid = generate_grid_with_obstacles(5)
+    # robot_pos = (0, 0)
+    # goal = (19, 19)
+    #
+    # grid[robot_pos] = MapState.ROBOT.value
+    # grid[goal] = MapState.GOAL.value
 
     nb_of_test = 100
 
-    plot_grid(grid=grid, path=astar(grid, robot_pos, goal), text='A*')
+    astar_nb_list, astar_nb_of_turns, astar_smoothness, astar_nb_t_exec, astar_nb_cost, astar_nb_fails = [], [], [], [], [], 0
+    rrt_nb_list, rrt_nb_of_turns, rrt_smoothness, rrt_nb_t_exec, rrt_nb_cost, rrt_nb_fails = [], [], [], [], [], 0
+    rrt_fast_list, rrt_fast_nb_of_turns, rrt_fast_smoothness, rrt_fast_t_exec, rrt_fast_cost, rrt_fast_fails = [], [], [], [], [], 0
+    rrt_div_list, rrt_div_nb_of_turns, rrt_div_smoothness, rrt_div_t_exec, rrt_div_cost, rrt_div_fails = [], [], [], [], [], 0
+    rrt_con_list, rrt_con_nb_of_turns, rrt_con_smoothness, rrt_con_t_exec, rrt_con_cost, rrt_con_fails = [], [], [], [], [], 0
+    rrt_star_list, rrt_star_nb_of_turns, rrt_star_smoothness, rrt_star_t_exec, rrt_star_cost, rrt_star_fails = [], [], [], [], [], 0
+    # ga_list, ga_nb_of_turns, ga_smoothness, ga_t_exec, ga_cost, ga_fails = [], [], [], [], [], 0
 
-    rrt_nb_list = []
-    rrt_nb_t_exec = []
+    max_time = 600_000_000
+    lim_iter = 100_000
 
-    rrt_fast_list = []
-    rrt_fast_t_exec = []
+    astar_sol = astar(grid, robot_pos, goal)
 
-    rrt_div_list = []
-    rrt_div_t_exec = []
-
-    rrt_con_list = []
-    rrt_con_t_exec = []
-
-    rrt_star_list = []
-    rrt_star_t_exec = []
-
-    max_time = 10_000
-
+    if astar_sol is not None:
+        plot_grid(grid=grid, path=astar_sol, text='A*')
+        astar_nb_list.append(len(astar_sol[1]))
+        astar_nb_t_exec.append(astar_sol[2] / 1_000_000)
+        astar_nb_cost.append(astar_sol[3])
+        astar_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(astar_sol[1])))
+        astar_smoothness.append(calculate_smoothness(eliminate_duplicates(astar_sol[1])))
+    else:
+        astar_nb_list.append(np.nan)
+        astar_nb_t_exec.append(np.nan)
+        astar_nb_cost.append(np.nan)
+        astar_nb_of_turns.append(np.nan)
+        astar_smoothness.append(np.nan)
+        astar_nb_fails += 1
+    input()
     for i in range(nb_of_test):
-        rrt_sol = rrt(grid, robot_pos, goal, max_time)
+        print(i/nb_of_test)
+
+        if random_grid:
+            grid = generate_grid_with_obstacles(5)
+            robot_pos = (0, 0)
+            goal = (19, 19)
+
+            grid[robot_pos] = MapState.ROBOT.value
+            grid[goal] = MapState.GOAL.value
+
+
+        rrt_sol = rrt(grid, robot_pos, goal, lim_iter, max_time)
         if rrt_sol is not None:
-            plot_grid(grid=grid, path=rrt_sol, text='RRT')  # GOOD#
-            rrt_nb_list.append(rrt_sol[0])
-            rrt_nb_t_exec.append(rrt_sol[2])
+            plot_grid(grid=grid, path=rrt_sol, text='RRT')
+            rrt_nb_list.append(len(rrt_sol[1]))
+            rrt_nb_t_exec.append(rrt_sol[2] / 1_000_000)
+            rrt_nb_cost.append(rrt_sol[3])
+            rrt_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(rrt_sol[1])))
+            rrt_smoothness.append(calculate_smoothness(eliminate_duplicates(rrt_sol[1])))
         else:
             rrt_nb_list.append(np.nan)
             rrt_nb_t_exec.append(np.nan)
+            rrt_nb_cost.append(np.nan)
+            rrt_nb_of_turns.append(np.nan)
+            rrt_smoothness.append(np.nan)
+            rrt_nb_fails += 1
 
-        rrt_con_sol = rrt_connect(grid, robot_pos, goal, max_time)
+        rrt_con_sol = rrt_connect(grid, robot_pos, goal, lim_iter, max_time)
         if rrt_con_sol is not None:
-            plot_grid(grid=grid, path=rrt_con_sol, text='RRT Connect')  # GOOD#
-            rrt_con_list.append(rrt_con_sol[0])
-            rrt_con_t_exec.append(rrt_con_sol[2])
+            plot_grid(grid=grid, path=rrt_con_sol, text='RRT Connect')
+            rrt_con_list.append(len(rrt_con_sol[1]))
+            rrt_con_t_exec.append(rrt_con_sol[2] / 1_000_000)
+            rrt_con_cost.append(rrt_con_sol[3])
+            rrt_con_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(rrt_con_sol[1])))
+            rrt_con_smoothness.append(calculate_smoothness(eliminate_duplicates(rrt_con_sol[1])))
         else:
             rrt_con_list.append(np.nan)
             rrt_con_t_exec.append(np.nan)
+            rrt_con_cost.append(np.nan)
+            rrt_con_nb_of_turns.append(np.nan)
+            rrt_con_smoothness.append(np.nan)
+            rrt_con_fails += 1
 
-        rrt_div_sol = rrt_div(grid, robot_pos, goal, max_time)
+        rrt_div_sol = rrt_div(grid, robot_pos, goal, lim_iter, max_time)
         if rrt_div_sol is not None:
-            plot_grid(grid=grid, path=rrt_div_sol, text='RRT div')  # GOOD#
-            rrt_div_list.append(rrt_div_sol[0])
-            rrt_div_t_exec.append(rrt_div_sol[2])
+            plot_grid(grid=grid, path=rrt_div_sol, text='RRT div')
+            rrt_div_list.append(len(rrt_div_sol[1]))
+            rrt_div_t_exec.append(rrt_div_sol[2] / 1_000_000)
+            rrt_div_cost.append(rrt_div_sol[3])
+            rrt_div_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(rrt_div_sol[1])))
+            rrt_div_smoothness.append(calculate_smoothness(eliminate_duplicates(rrt_div_sol[1])))
         else:
             rrt_div_list.append(np.nan)
             rrt_div_t_exec.append(np.nan)
+            rrt_div_cost.append(np.nan)
+            rrt_div_nb_of_turns.append(np.nan)
+            rrt_div_smoothness.append(np.nan)
+            rrt_div_fails += 1
 
-        rrt_fast_sol = rrt_fast(grid, robot_pos, goal, max_time)
+        rrt_fast_sol = rrt_fast(grid, robot_pos, goal, lim_iter, max_time)
         if rrt_fast_sol is not None:
-            plot_grid(grid=grid, path=rrt_fast_sol, text='RRT fast')  # GOOD#
-            rrt_fast_list.append(rrt_fast_sol[0])
-            rrt_fast_t_exec.append(rrt_fast_sol[2])
+            plot_grid(grid=grid, path=rrt_fast_sol, text='RRT fast')
+            rrt_fast_list.append(len(rrt_fast_sol[1]))
+            rrt_fast_t_exec.append(rrt_fast_sol[2] / 1_000_000)
+            rrt_fast_cost.append(rrt_fast_sol[3])
+            rrt_fast_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(rrt_fast_sol[1])))
+            rrt_fast_smoothness.append(calculate_smoothness(eliminate_duplicates(rrt_fast_sol[1])))
         else:
             rrt_fast_list.append(np.nan)
             rrt_fast_t_exec.append(np.nan)
+            rrt_fast_cost.append(np.nan)
+            rrt_fast_nb_of_turns.append(np.nan)
+            rrt_fast_smoothness.append(np.nan)
+            rrt_fast_fails += 1
 
-        max_dist = 100
-        rrt_star_sol = rrt_star(grid, robot_pos, goal, max_dist, max_time)
+        max_dist = 10
+        rrt_star_sol = rrt_star(grid, robot_pos, goal, lim_iter, max_dist, max_time)
         if rrt_star_sol is not None:
-            plot_grid(grid=grid, path=rrt_star_sol, text='RRT*')  # GOOD#
-            rrt_star_list.append(rrt_star_sol[0])
-            rrt_star_t_exec.append(rrt_star_sol[2])
+            plot_grid(grid=grid, path=rrt_star_sol, text='RRT*')
+            rrt_star_list.append(len(rrt_star_sol[1]))
+            rrt_star_t_exec.append(rrt_star_sol[2] / 1_000_000)
+            rrt_star_cost.append(rrt_star_sol[3])
+            rrt_star_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(rrt_star_sol[1])))
+            rrt_star_smoothness.append(calculate_smoothness(eliminate_duplicates(rrt_star_sol[1])))
         else:
             rrt_star_list.append(np.nan)
             rrt_star_t_exec.append(np.nan)
+            rrt_star_cost.append(np.nan)
+            rrt_star_nb_of_turns.append(np.nan)
+            rrt_star_smoothness.append(np.nan)
+            rrt_star_fails += 1
 
-        print(i/nb_of_test)
+        # lens = [i * 5 + 5 for i in range(int(len(grid) * len(grid[0]) / 5))]
+        # ga_solution = None
+        # for ln in lens:
+        #     print(ln)
+        #     ga_solution = genetic_algorithm(population_size=1000, move_length=ln, generations=100,
+        #                                     mutation_rate=0.25, grid=grid, max_time=max_time)
+        #     if ga_solution is not None:
+        #         break
+        #
+        # if ga_solution is not None:
+        #     plot_grid(grid=grid, path=ga_solution, text='GA')
+        #     ga_list.append(len(ga_solution[1]))
+        #     ga_t_exec.append(ga_solution[2] / 1_000_000)
+        #     ga_cost.append(ga_solution[3])
+        #     ga_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(ga_solution[1])))
+        #     ga_smoothness.append(calculate_smoothness(eliminate_duplicates(ga_solution[1])))
+        # else:
+        #     ga_list.append(np.nan)
+        #     ga_t_exec.append(np.nan)
+        #     ga_cost.append(np.nan)
+        #     ga_nb_of_turns.append(np.nan)
+        #     ga_smoothness.append(np.nan)
+        #     ga_fails += 1
+
+    methods = ['RRT', 'RRT Connect', 'RRT Div', 'RRT Fast', 'RRT Star']  # , 'GA']
+
+    all_lists = [
+        astar_nb_list, rrt_nb_list, rrt_con_list, rrt_div_list, rrt_fast_list, rrt_star_list,
+        astar_nb_of_turns, rrt_nb_of_turns, rrt_con_nb_of_turns, rrt_div_nb_of_turns, rrt_fast_nb_of_turns,
+        rrt_star_nb_of_turns,
+        astar_smoothness, rrt_smoothness, rrt_con_smoothness, rrt_div_smoothness, rrt_fast_smoothness,
+        rrt_star_smoothness,
+        astar_nb_t_exec, rrt_nb_t_exec, rrt_con_t_exec, rrt_div_t_exec, rrt_fast_t_exec, rrt_star_t_exec,
+        astar_nb_cost, rrt_nb_cost, rrt_con_cost, rrt_div_cost, rrt_fast_cost, rrt_star_cost
+    ]
+    i = 0
+    for lst in all_lists:
+        if len(lst) == 0:
+            print(i)
+            print("AAA")
+            input()
+            i += 1
+
+    path_lengths = [
+        np.nanmean(rrt_nb_list), np.nanmean(rrt_con_list), np.nanmean(rrt_div_list),
+        np.nanmean(rrt_fast_list), np.nanmean(rrt_star_list)
+    ]
+    number_of_turns = [
+        np.nanmean(rrt_nb_of_turns), np.nanmean(rrt_con_nb_of_turns),
+        np.nanmean(rrt_div_nb_of_turns), np.nanmean(rrt_fast_nb_of_turns), np.nanmean(rrt_star_nb_of_turns)
+    ]
+    smoothness = [
+        np.nanmean(rrt_smoothness), np.nanmean(rrt_con_smoothness),
+        np.nanmean(rrt_div_smoothness), np.nanmean(rrt_fast_smoothness), np.nanmean(rrt_star_smoothness)
+    ]
+    execution_times = [
+        np.nanmean(rrt_nb_t_exec), np.nanmean(rrt_con_t_exec), np.nanmean(rrt_div_t_exec),
+        np.nanmean(rrt_fast_t_exec), np.nanmean(rrt_star_t_exec)
+    ]
+    energy_costs = [
+        np.nanmean(rrt_nb_cost), np.nanmean(rrt_con_cost), np.nanmean(rrt_div_cost),
+        np.nanmean(rrt_fast_cost), np.nanmean(rrt_star_cost)
+    ]
+    number_of_fails = [
+        rrt_nb_fails/nb_of_test*100, rrt_con_fails/nb_of_test*100, rrt_div_fails/nb_of_test*100, rrt_fast_fails/nb_of_test*100, rrt_star_fails/nb_of_test*100
+    ]
+
+    criteria = ['Number of Nodes', 'Number of Turns', 'Smoothness',
+                'Execution Time', 'Path Length [m]', 'Percentage of Failed Tests']
+
+    plot_comparison(methods, path_lengths, number_of_turns, smoothness, execution_times, energy_costs, number_of_fails,
+                    criteria)
 
     print("NUMBER OF TRIES ANALYSIS:")
     print_statistics(rrt_nb_list, 'RRT')
     print_statistics(rrt_con_list, 'RRT Connect')
     print_statistics(rrt_div_list, 'RRT Div')
     print_statistics(rrt_fast_list, 'RRT Fast')
+    # print_statistics(ga_list, 'GA')
     print("\n\n\n")
 
     print("TIME ANALYSIS:")
@@ -920,6 +1309,92 @@ def main():
     print_statistics(rrt_con_t_exec, 'RRT Connect')
     print_statistics(rrt_div_t_exec, 'RRT Div')
     print_statistics(rrt_fast_t_exec, 'RRT Fast')
-    
+    # print_statistics(ga_t_exec, 'GA')
+    print("\n\n\n")
+
+    print("COST ANALYSIS:")
+    print_statistics(rrt_nb_cost, 'RRT')
+    print_statistics(rrt_con_cost, 'RRT Connect')
+    print_statistics(rrt_div_cost, 'RRT Div')
+    print_statistics(rrt_fast_cost, 'RRT Fast')
+    # print_statistics(ga_cost, 'GA')
+    print("\n\n\n")
+
+    print("NUMBER OF TURNS ANALYSIS:")
+    print_statistics(rrt_nb_of_turns, 'RRT')
+    print_statistics(rrt_con_nb_of_turns, 'RRT Connect')
+    print_statistics(rrt_div_nb_of_turns, 'RRT Div')
+    print_statistics(rrt_fast_nb_of_turns, 'RRT Fast')
+    print_statistics(rrt_star_nb_of_turns, 'RRT Star')
+    # print_statistics(ga_nb_of_turns, 'GA')
+    print("\n\n\n")
+
+    print("SMOOTHNESS ANALYSIS:")
+    print_statistics(rrt_smoothness, 'RRT')
+    print_statistics(rrt_con_smoothness, 'RRT Connect')
+    print_statistics(rrt_div_smoothness, 'RRT Div')
+    print_statistics(rrt_fast_smoothness, 'RRT Fast')
+    print_statistics(rrt_star_smoothness, 'RRT Star')
+    # print_statistics(ga_smoothness, 'GA')
+
+    write_excel = True
+    if write_excel:
+        current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'result{current_time}.xlsx'
+
+        data = {
+            'RRT': {
+                'Path': rrt_nb_list,
+                'Execution Time': rrt_nb_t_exec,
+                'Cost': rrt_nb_cost
+            },
+            'RRT Connect': {
+                'Path': rrt_con_list,
+                'Execution Time': rrt_con_t_exec,
+                'Cost': rrt_con_cost
+            },
+            'RRT Div': {
+                'Path': rrt_div_list,
+                'Execution Time': rrt_div_t_exec,
+                'Cost': rrt_div_cost
+            },
+            'RRT Fast': {
+                'Path': rrt_fast_list,
+                'Execution Time': rrt_fast_t_exec,
+                'Cost': rrt_fast_cost
+            },
+            'RRT star': {
+                'Path': rrt_star_list,
+                'Execution Time': rrt_star_t_exec,
+                'Cost': rrt_star_cost
+            }
+            # 'GA': {
+            #     'Path': rrt_star_list,
+            #     'Execution Time': rrt_star_t_exec,
+            #     'Cost': rrt_star_cost
+            # }
+        }
+        print("Write Excel")
+
+        with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
+            workbook = writer.book
+            worksheet = workbook.add_worksheet("Results")
+            writer.sheets['Results'] = worksheet
+
+            row = 0
+            for method, values in data.items():
+                worksheet.write(row, 0, method)
+                row += 1
+                for key, val_list in values.items():
+                    worksheet.write(row, 0, key)
+                    for col, val in enumerate(val_list, start=1):
+                        if pd.isna(val):
+                            worksheet.write_string(row, col, 'NaN')
+                        else:
+                            worksheet.write(row, col, val)
+                    row += 1
+                row += 1  # add a blank line after each method
+        print("Ended Write Excel")
+
 
 main()

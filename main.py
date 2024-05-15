@@ -119,7 +119,10 @@ def populate_map(lidar_x_data, lidar_y_data, robot, goal, resolution=0.25):
     extended_matrix[goal[1], goal[0]] = MapState.GOAL.value
 
     # matrix = extended_matrix.copy()
+    for line in matrix:
+        print(line)
 
+    input()
     return point, extended_matrix
 
 
@@ -378,7 +381,7 @@ def plot_complete_scan(path_scan1, path_scan2):
 
             plt.tight_layout()
 
-        continuous_time = True
+        continuous_time = False
         if continuous_time:
             plt.plot([robot.corner1[0], robot.corner2[0], robot.corner3[0], robot.corner4[0]],
                      [robot.corner1[1], robot.corner2[1], robot.corner3[1], robot.corner4[1]], 'b-')
@@ -612,7 +615,7 @@ def print_header(path):
             print(hd, " ", ind)
 
 
-def main():
+def main_local():
     # print_distance()
     # plot_complete_scan('lidarBackScan1.txt', 'lidarFrontScan2.txt')
     plot_complete_scan(r'C:\Users\Iulian\Desktop\scan1_1_120.txt', r'C:\Users\Iulian\Desktop\scan2_1_120.txt')
@@ -635,5 +638,5 @@ if __name__ == '__main__':
     map_cmap = ListedColormap(colors, name='color_map')
     bounds = [i + 1 for i in range(len(colors) + 1)]
     map_norm = BoundaryNorm(bounds, len(bounds) - 1)
-
-    main()
+    print("hello")
+    main_local()
