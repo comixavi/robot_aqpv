@@ -38,7 +38,6 @@ def populate_map(lidar_x_data, lidar_y_data, robot, goal, resolution=0.25):
     def y_discrete(el):
         return int((el - y_min) / resolution)
 
-    # Region: obstacles
     non_inf_numbers = [num for num in lidar_x_data if not np.isinf(num) and not np.isnan(num)]
     x_min = closest_integer(min(non_inf_numbers))
     non_inf_numbers = [num for num in lidar_x_data if not np.isinf(num) and not np.isnan(num)]
@@ -60,7 +59,6 @@ def populate_map(lidar_x_data, lidar_y_data, robot, goal, resolution=0.25):
             if shape_lines > lidar_x and shape_col > lidar_y:
                 matrix[lidar_x, lidar_y] = MapState.OBSTACLE.value
 
-    # Region: car
     onePointReduction = True
     point = [x_discrete(robot.x), y_discrete(robot.y)]
 
@@ -99,7 +97,6 @@ def populate_map(lidar_x_data, lidar_y_data, robot, goal, resolution=0.25):
 
         matrix[point[0], point[1]] = MapState.ROBOT.value
 
-    # Region: extended obstacles
     num_blocks = int(robot.diag / resolution)
 
     extended_matrix = matrix.copy()
@@ -119,8 +116,8 @@ def populate_map(lidar_x_data, lidar_y_data, robot, goal, resolution=0.25):
     extended_matrix[goal[1], goal[0]] = MapState.GOAL.value
 
     # matrix = extended_matrix.copy()
-    for line in matrix:
-        print(line)
+    for line in extended_matrix:
+        print(len(line))
 
     input()
     return point, extended_matrix
