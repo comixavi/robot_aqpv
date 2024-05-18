@@ -591,7 +591,8 @@ def rrt_div(grid, start, goal, lim=1_000, max_t=10):
         min_cost = float('inf')
         new_pose = None
 
-        points = random_quad(current_pos.x, current_pos.y, current_pos.x-5, current_pos.y-5, current_pos.x+5, current_pos.y+5)
+        points = random_quad(current_pos.x, current_pos.y, max(0, current_pos.x-5), max(0, current_pos.y-5),
+                             min(current_pos.x+5, cols-1), min(current_pos.y+5, cols-1))
 
         for point in points:
             if obstacle_collide_bresenham_line(grid, *point, current_pos.x, current_pos.y, checked_combos):
@@ -987,6 +988,7 @@ def plot_comparison(methods, path_lengths, number_of_turns, smoothness, executio
     ax.set_title('Comparison of Methods by Various Criteria')
     ax.set_xticks(index + bar_width * (num_criteria - 1) / 2)
     ax.set_xticklabels(methods, rotation=45, ha='right')
+    ax.xaxis.set_tick_params(labelsize=12)
     ax.legend()
 
     plt.tight_layout()
@@ -1008,15 +1010,44 @@ def eliminate_duplicates(lst):
     return result
 
 
+def plot_deviations(methods, data, criteria, mean_values):
+    num_methods = len(methods)
+    num_criteria = len(criteria)
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    bar_width = 0.15
+    index = np.arange(num_methods)
+
+    for i, criterion in enumerate(criteria):
+        if mean_values[i] != 0:  # Avoid division by zero
+            deviations = [abs(data[j][i] - mean_values[i]) / mean_values[i] for j in range(num_methods)]
+        else:
+            deviations = [0] * num_methods  # Set deviations to 0 where mean is 0 to handle division by zero
+        for ind, dev in enumerate(deviations):
+            if dev > 1:
+                deviations[ind] = 1
+        ax.bar(index + i * bar_width, deviations, bar_width, label=f'Standardized Deviation of {criterion}')
+
+    ax.set_xlabel('Methods')
+    ax.set_ylabel('Standardized Deviation')
+    ax.set_title('Standardized Deviations from Mean by Various Criteria')
+    ax.set_xticks(index + bar_width * (num_criteria - 1) / 2)
+    ax.set_xticklabels(methods, rotation=45, ha='right')
+    ax.legend()
+
+    plt.tight_layout()
+    plt.show()
+
+
 def main():
-    simple_grid = False
+    simple_grid = True
     random_grid = False
-    lidar_grid = True
+    lidar_grid = False
 
     robot_pos = None
     goal = None
 
-    grid = []
+
 
     if simple_grid:
         shape_lines = 5
@@ -1125,7 +1156,7 @@ def main():
         grid[robot_pos] = MapState.ROBOT.value
         grid[goal] = MapState.GOAL.value
 
-    nb_of_test = 1000
+    nb_of_test = 3
 
     astar_nb_list, astar_nb_of_turns, astar_smoothness, astar_nb_t_exec, astar_nb_cost, astar_nb_fails = [], [], [], [], [], 0
     rrt_nb_list, rrt_nb_of_turns, rrt_smoothness, rrt_nb_t_exec, rrt_nb_cost, rrt_nb_fails = [], [], [], [], [], 0
@@ -1133,7 +1164,7 @@ def main():
     rrt_div_list, rrt_div_nb_of_turns, rrt_div_smoothness, rrt_div_t_exec, rrt_div_cost, rrt_div_fails = [], [], [], [], [], 0
     rrt_con_list, rrt_con_nb_of_turns, rrt_con_smoothness, rrt_con_t_exec, rrt_con_cost, rrt_con_fails = [], [], [], [], [], 0
     rrt_star_list, rrt_star_nb_of_turns, rrt_star_smoothness, rrt_star_t_exec, rrt_star_cost, rrt_star_fails = [], [], [], [], [], 0
-    # ga_list, ga_nb_of_turns, ga_smoothness, ga_t_exec, ga_cost, ga_fails = [], [], [], [], [], 0
+    ga_list, ga_nb_of_turns, ga_smoothness, ga_t_exec, ga_cost, ga_fails = [], [], [], [], [], 0
 
     max_time = 600_000_000
     lim_iter = 250_000
@@ -1248,71 +1279,57 @@ def main():
             rrt_star_smoothness.append(np.nan)
             rrt_star_fails += 1
 
-        # lens = [i * 5 + 5 for i in range(int(len(grid) * len(grid[0]) / 5))]
-        # ga_solution = None
-        # for ln in lens:
-        #     print(ln)
-        #     ga_solution = genetic_algorithm(population_size=1000, move_length=ln, generations=100,
-        #                                     mutation_rate=0.25, grid=grid, max_time=max_time)
-        #     if ga_solution is not None:
-        #         break
-        #
-        # if ga_solution is not None:
-        #     plot_grid(grid=grid, path=ga_solution, text='GA')
-        #     ga_list.append(len(ga_solution[1]))
-        #     ga_t_exec.append(ga_solution[2] / 1_000_000)
-        #     ga_cost.append(ga_solution[3])
-        #     ga_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(ga_solution[1])))
-        #     ga_smoothness.append(calculate_smoothness(eliminate_duplicates(ga_solution[1])))
-        # else:
-        #     ga_list.append(np.nan)
-        #     ga_t_exec.append(np.nan)
-        #     ga_cost.append(np.nan)
-        #     ga_nb_of_turns.append(np.nan)
-        #     ga_smoothness.append(np.nan)
-        #     ga_fails += 1
+        if simple_grid:
+            lens = [i * 5 + 5 for i in range(int(len(grid) * len(grid[0]) / 5))]
+            ga_solution = None
+            for ln in lens:
+                print(ln)
+                ga_solution = genetic_algorithm(population_size=1000, move_length=ln, generations=100,
+                                                mutation_rate=0.25, grid=grid, max_time=max_time)
+                if ga_solution is not None:
+                    break
 
-    methods = ['RRT', 'RRT Connect', 'RRT Div', 'RRT Fast', 'RRT Star']  # , 'GA']
+            if ga_solution is not None:
+                plot_grid(grid=grid, path=ga_solution, text='GA')
+                ga_list.append(len(ga_solution[1]))
+                ga_t_exec.append(ga_solution[2] / 1_000_000)
+                ga_cost.append(ga_solution[3])
+                ga_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(ga_solution[1])))
+                ga_smoothness.append(calculate_smoothness(eliminate_duplicates(ga_solution[1])))
+            else:
+                ga_list.append(np.nan)
+                ga_t_exec.append(np.nan)
+                ga_cost.append(np.nan)
+                ga_nb_of_turns.append(np.nan)
+                ga_smoothness.append(np.nan)
+                ga_fails += 1
 
-    all_lists = [
-        astar_nb_list, rrt_nb_list, rrt_con_list, rrt_div_list, rrt_fast_list, rrt_star_list,
-        astar_nb_of_turns, rrt_nb_of_turns, rrt_con_nb_of_turns, rrt_div_nb_of_turns, rrt_fast_nb_of_turns,
-        rrt_star_nb_of_turns,
-        astar_smoothness, rrt_smoothness, rrt_con_smoothness, rrt_div_smoothness, rrt_fast_smoothness,
-        rrt_star_smoothness,
-        astar_nb_t_exec, rrt_nb_t_exec, rrt_con_t_exec, rrt_div_t_exec, rrt_fast_t_exec, rrt_star_t_exec,
-        astar_nb_cost, rrt_nb_cost, rrt_con_cost, rrt_div_cost, rrt_fast_cost, rrt_star_cost
-    ]
-    i = 0
-    for lst in all_lists:
-        if len(lst) == 0:
-            print(i)
-            print("AAA")
-            input()
-            i += 1
+    methods = ['RRT', 'RRT Connect', 'RRT Div', 'RRT Fast', 'RRT Star',  'GA']
 
     path_lengths = [
         np.nanmean(rrt_nb_list), np.nanmean(rrt_con_list), np.nanmean(rrt_div_list),
-        np.nanmean(rrt_fast_list), np.nanmean(rrt_star_list)
+        np.nanmean(rrt_fast_list), np.nanmean(rrt_star_list), np.nanmean(ga_list),
     ]
     number_of_turns = [
         np.nanmean(rrt_nb_of_turns), np.nanmean(rrt_con_nb_of_turns),
-        np.nanmean(rrt_div_nb_of_turns), np.nanmean(rrt_fast_nb_of_turns), np.nanmean(rrt_star_nb_of_turns)
+        np.nanmean(rrt_div_nb_of_turns), np.nanmean(rrt_fast_nb_of_turns), np.nanmean(rrt_star_nb_of_turns),
+        np.nanmean(ga_nb_of_turns)
     ]
     smoothness = [
         np.nanmean(rrt_smoothness), np.nanmean(rrt_con_smoothness),
-        np.nanmean(rrt_div_smoothness), np.nanmean(rrt_fast_smoothness), np.nanmean(rrt_star_smoothness)
+        np.nanmean(rrt_div_smoothness), np.nanmean(rrt_fast_smoothness), np.nanmean(rrt_star_smoothness),
+        np.nanmean(ga_smoothness)
     ]
     execution_times = [
         np.nanmean(rrt_nb_t_exec), np.nanmean(rrt_con_t_exec), np.nanmean(rrt_div_t_exec),
-        np.nanmean(rrt_fast_t_exec), np.nanmean(rrt_star_t_exec)
+        np.nanmean(rrt_fast_t_exec), np.nanmean(rrt_star_t_exec), np.nanmean(ga_t_exec)
     ]
     energy_costs = [
         np.nanmean(rrt_nb_cost), np.nanmean(rrt_con_cost), np.nanmean(rrt_div_cost),
-        np.nanmean(rrt_fast_cost), np.nanmean(rrt_star_cost)
+        np.nanmean(rrt_fast_cost), np.nanmean(rrt_star_cost), np.nanmean(ga_cost)
     ]
     number_of_fails = [
-        rrt_nb_fails/nb_of_test*100, rrt_con_fails/nb_of_test*100, rrt_div_fails/nb_of_test*100, rrt_fast_fails/nb_of_test*100, rrt_star_fails/nb_of_test*100
+        rrt_nb_fails/nb_of_test*100, rrt_con_fails/nb_of_test*100, rrt_div_fails/nb_of_test*100, rrt_fast_fails/nb_of_test*100, rrt_star_fails/nb_of_test*100, ga_fails/nb_of_test*100
     ]
 
     criteria = ['Number of Nodes', 'Number of Turns', 'Smoothness',
@@ -1361,6 +1378,17 @@ def main():
     print_statistics(rrt_fast_smoothness, 'RRT Fast')
     print_statistics(rrt_star_smoothness, 'RRT Star')
     # print_statistics(ga_smoothness, 'GA')
+
+    mean_path_lengths = np.nanmean(path_lengths)
+    mean_number_of_turns = np.nanmean(number_of_turns)
+    mean_smoothness = np.nanmean(smoothness)
+    mean_execution_times = np.nanmean(execution_times)
+    mean_energy_costs = np.nanmean(energy_costs)
+
+    mean_values = [mean_path_lengths, mean_number_of_turns, mean_smoothness, mean_execution_times, mean_energy_costs]
+
+    plot_deviations(methods, [path_lengths, number_of_turns, smoothness, execution_times, energy_costs], criteria[:-1],
+                    mean_values)
 
     write_excel = True
     if write_excel:
