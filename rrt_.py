@@ -795,7 +795,7 @@ def generate_grid_with_obstacles(num_obstacles):
     return grid
 
 
-def plot_blank_grid(grid):
+def plot_blank_grid(grid, title):
     colors = ['blue', 'white', 'black', (0.6, 0.6, 0.6), 'green']
     Ts = 100
     map_cmap = ListedColormap(colors, name='color_map')
@@ -811,7 +811,7 @@ def plot_blank_grid(grid):
     legend_handles = [plt.Rectangle((0, 0), 1, 1,
                                     color=map_cmap(map_norm(i + 1))) for i in range(len(legend_labels))]
 
-    plt.title('Robot Environment')
+    plt.title(f'Robot Environment - {title}')
     plt.xlabel('X')
     plt.ylabel('Y')
     plt.xlim(x_min, x_max)
@@ -828,7 +828,7 @@ def plot_blank_grid(grid):
 
 def plot_grid(grid, path, text):
     colors = ['blue', 'white', 'black', (0.6, 0.6, 0.6), 'green']
-    Ts = 1 / 24
+    Ts = 6
     map_cmap = ListedColormap(colors, name='color_map')
     bounds = [i + 1 for i in range(len(colors) + 1)]
     map_norm = BoundaryNorm(bounds, len(bounds) - 1)
@@ -842,20 +842,22 @@ def plot_grid(grid, path, text):
     legend_handles = [plt.Rectangle((0, 0), 1, 1,
                                     color=map_cmap(map_norm(i + 1))) for i in range(len(legend_labels))]
 
-    plt.title('Robot Environment')
+    plt.title(f'Robot Environment - {text}')
     plt.xlabel('X')
     plt.ylabel('Y')
     plt.xlim(x_min, x_max)
     plt.ylim(y_min, y_max)
+    color = (28/255, 43/255, 244/255, 1)
 
     if path is not None:
-        nb_of_nodes, path_astar, times, costs = path
+        nb_of_nodes, path, times, costs = path
 
-        path_astar = np.array(path_astar)
-        plt.plot(path_astar[:, 1], path_astar[:, 0], color='lime', marker='o')
+        path = np.array(path)
+        plt.plot(path[:, 1], path[:, 0], color=color, marker='o')
         legend_labels.append(f"{text} Path")
         legend_handles.append(
-            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='lime', markersize=10, label=f'{text} Path'))
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=color,
+                       markersize=10, label=f'{text} Path'))
 
     plt.xlim(x_min, x_max)
     plt.ylim(y_min, y_max)
@@ -1040,14 +1042,16 @@ def plot_deviations(methods, data, criteria, mean_values):
 
 
 def main():
-    simple_grid = True
-    random_grid = False
+    simple_grid = False
+    random_grid = True
     lidar_grid = False
+    grid = None
 
     robot_pos = None
     goal = None
 
-
+    frame_by_frame = False
+    use_ga = True
 
     if simple_grid:
         shape_lines = 5
@@ -1147,7 +1151,6 @@ def main():
         # print(shape_lines, "x", shape_col)
         # plot_blank_grid(grid)
         # input()
-
     if random_grid:
         grid = generate_grid_with_obstacles(5)
         robot_pos = (0, 0)
@@ -1156,7 +1159,7 @@ def main():
         grid[robot_pos] = MapState.ROBOT.value
         grid[goal] = MapState.GOAL.value
 
-    nb_of_test = 3
+    nb_of_test = 100
 
     astar_nb_list, astar_nb_of_turns, astar_smoothness, astar_nb_t_exec, astar_nb_cost, astar_nb_fails = [], [], [], [], [], 0
     rrt_nb_list, rrt_nb_of_turns, rrt_smoothness, rrt_nb_t_exec, rrt_nb_cost, rrt_nb_fails = [], [], [], [], [], 0
@@ -1170,11 +1173,17 @@ def main():
     lim_iter = 250_000
     print(robot_pos)
     print(goal)
+
     astar_sol = astar(grid, robot_pos, goal)
 
     if astar_sol is not None:
-        plot_grid(grid=grid, path=astar_sol, text='A*')
-        astar_nb_list.append(len(astar_sol[1]))
+        if frame_by_frame:
+            for j in range(len(astar_sol[1]) - 1):
+                rrt_sol_aux = astar_sol[0], astar_sol[1][0:j + 1], astar_sol[2], astar_sol[3]
+                plot_grid(grid=grid, path=rrt_sol_aux, text='A*')
+        else:
+            plot_grid(grid=grid, path=astar_sol, text='A*')
+            astar_nb_list.append(len(astar_sol[1]))
         astar_nb_t_exec.append(astar_sol[2] / 1_000_000)
         astar_nb_cost.append(astar_sol[3])
         astar_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(astar_sol[1])))
@@ -1200,7 +1209,13 @@ def main():
 
         rrt_sol = rrt(grid, robot_pos, goal, lim_iter, max_time)
         if rrt_sol is not None:
-            plot_grid(grid=grid, path=rrt_sol, text='RRT')
+            if frame_by_frame:
+                for j in range(len(rrt_sol[1])-1):
+                    rrt_sol_aux = rrt_sol[0], rrt_sol[1][0:j+1], rrt_sol[2], rrt_sol[3]
+                    plot_grid(grid=grid, path=rrt_sol_aux, text='RRT')
+            else:
+                plot_grid(grid=grid, path=rrt_sol, text='RRT')
+
             rrt_nb_list.append(len(rrt_sol[1]))
             rrt_nb_t_exec.append(rrt_sol[2] / 1_000_000)
             rrt_nb_cost.append(rrt_sol[3])
@@ -1216,7 +1231,13 @@ def main():
 
         rrt_con_sol = rrt_connect(grid, robot_pos, goal, lim_iter, max_time)
         if rrt_con_sol is not None:
-            plot_grid(grid=grid, path=rrt_con_sol, text='RRT Connect')
+            if frame_by_frame:
+                for j in range(len(rrt_con_sol[1]) - 1):
+                    rrt_con_sol_aux = rrt_con_sol[0], rrt_con_sol[1][0:j + 1], rrt_con_sol[2], rrt_con_sol[3]
+                    plot_grid(grid=grid, path=rrt_con_sol_aux, text='RRT Connect')
+            else:
+                plot_grid(grid=grid, path=rrt_con_sol, text='RRT Connect')
+
             rrt_con_list.append(len(rrt_con_sol[1]))
             rrt_con_t_exec.append(rrt_con_sol[2] / 1_000_000)
             rrt_con_cost.append(rrt_con_sol[3])
@@ -1232,7 +1253,12 @@ def main():
 
         rrt_div_sol = rrt_div(grid, robot_pos, goal, lim_iter, max_time)
         if rrt_div_sol is not None:
-            plot_grid(grid=grid, path=rrt_div_sol, text='RRT div')
+            if frame_by_frame:
+                for j in range(len(rrt_div_sol[1]) - 1):
+                    rrt_div_sol_aux = rrt_div_sol[0], rrt_div_sol[1][0:j + 1], rrt_div_sol[2], rrt_div_sol[3]
+                    plot_grid(grid=grid, path=rrt_div_sol_aux, text='RRT div')
+            else:
+                plot_grid(grid=grid, path=rrt_div_sol, text='RRT div')
             rrt_div_list.append(len(rrt_div_sol[1]))
             rrt_div_t_exec.append(rrt_div_sol[2] / 1_000_000)
             rrt_div_cost.append(rrt_div_sol[3])
@@ -1248,7 +1274,13 @@ def main():
 
         rrt_fast_sol = rrt_fast(grid, robot_pos, goal, lim_iter, max_time)
         if rrt_fast_sol is not None:
-            plot_grid(grid=grid, path=rrt_fast_sol, text='RRT fast')
+            if frame_by_frame:
+                for j in range(len(rrt_fast_sol[1]) - 1):
+                    rrt_fast_sol_aux = rrt_fast_sol[0], rrt_fast_sol[1][0:j + 1], rrt_fast_sol[2], rrt_fast_sol[3]
+                    plot_grid(grid=grid, path=rrt_fast_sol_aux, text='RRT fast')
+            else:
+                plot_grid(grid=grid, path=rrt_fast_sol, text='RRT fast')
+
             rrt_fast_list.append(len(rrt_fast_sol[1]))
             rrt_fast_t_exec.append(rrt_fast_sol[2] / 1_000_000)
             rrt_fast_cost.append(rrt_fast_sol[3])
@@ -1265,7 +1297,13 @@ def main():
         max_dist = 10
         rrt_star_sol = rrt_star(grid, robot_pos, goal, lim_iter, max_dist, max_time)
         if rrt_star_sol is not None:
-            plot_grid(grid=grid, path=rrt_star_sol, text='RRT*')
+            if frame_by_frame:
+                for j in range(len(rrt_star_sol[1]) - 1):
+                    rrt_star_sol_aux = rrt_star_sol[0], rrt_star_sol[1][0:j + 1], rrt_star_sol[2], rrt_star_sol[3]
+                    plot_grid(grid=grid, path=rrt_star_sol_aux, text='RRT*')
+            else:
+                plot_grid(grid=grid, path=rrt_star_sol, text='RRT*')
+
             rrt_star_list.append(len(rrt_star_sol[1]))
             rrt_star_t_exec.append(rrt_star_sol[2] / 1_000_000)
             rrt_star_cost.append(rrt_star_sol[3])
@@ -1279,23 +1317,33 @@ def main():
             rrt_star_smoothness.append(np.nan)
             rrt_star_fails += 1
 
-        if simple_grid:
-            lens = [i * 5 + 5 for i in range(int(len(grid) * len(grid[0]) / 5))]
+        if use_ga and simple_grid:
+            lens = [i * 4 + 5 for i in range(int(len(grid) * len(grid[0]) / 4))]
             ga_solution = None
             for ln in lens:
-                print(ln)
                 ga_solution = genetic_algorithm(population_size=1000, move_length=ln, generations=100,
                                                 mutation_rate=0.25, grid=grid, max_time=max_time)
                 if ga_solution is not None:
                     break
 
             if ga_solution is not None:
-                plot_grid(grid=grid, path=ga_solution, text='GA')
-                ga_list.append(len(ga_solution[1]))
+                loc_point = robot_pos
+                path_ga = [loc_point]
+                for ind, move in enumerate(ga_solution[1]):
+                    loc_goal = (path_ga[ind][0] + move[0], path_ga[ind][1] + move[1])
+                    path_ga.append(loc_goal)
+
+                if frame_by_frame:
+                    for j in range(len(path_ga) - 1):
+                        rrt_ga_aux = ga_solution[0], path_ga[0:j + 1], ga_solution[2], ga_solution[3]
+                        plot_grid(grid=grid, path=rrt_ga_aux, text='GA')
+                else:
+                    plot_grid(grid=grid, path=ga_solution, text='GA')
+                    ga_list.append(len(path_ga[1]))
                 ga_t_exec.append(ga_solution[2] / 1_000_000)
                 ga_cost.append(ga_solution[3])
-                ga_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(ga_solution[1])))
-                ga_smoothness.append(calculate_smoothness(eliminate_duplicates(ga_solution[1])))
+                ga_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(path_ga[1])))
+                ga_smoothness.append(calculate_smoothness(eliminate_duplicates(path_ga[1])))
             else:
                 ga_list.append(np.nan)
                 ga_t_exec.append(np.nan)
@@ -1304,33 +1352,41 @@ def main():
                 ga_smoothness.append(np.nan)
                 ga_fails += 1
 
-    methods = ['RRT', 'RRT Connect', 'RRT Div', 'RRT Fast', 'RRT Star',  'GA']
+    methods = ['RRT', 'RRT Connect', 'RRT Div', 'RRT Fast', 'RRT Star']
 
     path_lengths = [
         np.nanmean(rrt_nb_list), np.nanmean(rrt_con_list), np.nanmean(rrt_div_list),
-        np.nanmean(rrt_fast_list), np.nanmean(rrt_star_list), np.nanmean(ga_list),
+        np.nanmean(rrt_fast_list), np.nanmean(rrt_star_list)
     ]
     number_of_turns = [
         np.nanmean(rrt_nb_of_turns), np.nanmean(rrt_con_nb_of_turns),
-        np.nanmean(rrt_div_nb_of_turns), np.nanmean(rrt_fast_nb_of_turns), np.nanmean(rrt_star_nb_of_turns),
-        np.nanmean(ga_nb_of_turns)
+        np.nanmean(rrt_div_nb_of_turns), np.nanmean(rrt_fast_nb_of_turns), np.nanmean(rrt_star_nb_of_turns)
     ]
     smoothness = [
         np.nanmean(rrt_smoothness), np.nanmean(rrt_con_smoothness),
-        np.nanmean(rrt_div_smoothness), np.nanmean(rrt_fast_smoothness), np.nanmean(rrt_star_smoothness),
-        np.nanmean(ga_smoothness)
+        np.nanmean(rrt_div_smoothness), np.nanmean(rrt_fast_smoothness), np.nanmean(rrt_star_smoothness)
     ]
     execution_times = [
         np.nanmean(rrt_nb_t_exec), np.nanmean(rrt_con_t_exec), np.nanmean(rrt_div_t_exec),
-        np.nanmean(rrt_fast_t_exec), np.nanmean(rrt_star_t_exec), np.nanmean(ga_t_exec)
+        np.nanmean(rrt_fast_t_exec), np.nanmean(rrt_star_t_exec)
     ]
     energy_costs = [
         np.nanmean(rrt_nb_cost), np.nanmean(rrt_con_cost), np.nanmean(rrt_div_cost),
-        np.nanmean(rrt_fast_cost), np.nanmean(rrt_star_cost), np.nanmean(ga_cost)
+        np.nanmean(rrt_fast_cost), np.nanmean(rrt_star_cost)
     ]
     number_of_fails = [
-        rrt_nb_fails/nb_of_test*100, rrt_con_fails/nb_of_test*100, rrt_div_fails/nb_of_test*100, rrt_fast_fails/nb_of_test*100, rrt_star_fails/nb_of_test*100, ga_fails/nb_of_test*100
+        rrt_nb_fails / nb_of_test * 100, rrt_con_fails / nb_of_test * 100, rrt_div_fails / nb_of_test * 100,
+        rrt_fast_fails / nb_of_test * 100, rrt_star_fails / nb_of_test * 100
     ]
+
+    if use_ga:
+        methods.append('GA')
+        path_lengths.append(np.nanmean(ga_list))
+        number_of_turns.append(np.nanmean(ga_nb_of_turns))
+        smoothness.append(np.nanmean(ga_smoothness))
+        execution_times.append(np.nanmean(ga_t_exec))
+        energy_costs.append(np.nanmean(ga_cost))
+        number_of_fails.append(ga_fails / nb_of_test * 100)
 
     criteria = ['Number of Nodes', 'Number of Turns', 'Smoothness',
                 'Execution Time', 'Path Length [m]', 'Percentage of Failed Tests']
@@ -1343,7 +1399,8 @@ def main():
     print_statistics(rrt_con_list, 'RRT Connect')
     print_statistics(rrt_div_list, 'RRT Div')
     print_statistics(rrt_fast_list, 'RRT Fast')
-    # print_statistics(ga_list, 'GA')
+    if use_ga:
+        print_statistics(ga_list, 'GA')
     print("\n\n\n")
 
     print("TIME ANALYSIS:")
@@ -1351,7 +1408,8 @@ def main():
     print_statistics(rrt_con_t_exec, 'RRT Connect')
     print_statistics(rrt_div_t_exec, 'RRT Div')
     print_statistics(rrt_fast_t_exec, 'RRT Fast')
-    # print_statistics(ga_t_exec, 'GA')
+    if use_ga:
+        print_statistics(ga_t_exec, 'GA')
     print("\n\n\n")
 
     print("COST ANALYSIS:")
@@ -1359,7 +1417,8 @@ def main():
     print_statistics(rrt_con_cost, 'RRT Connect')
     print_statistics(rrt_div_cost, 'RRT Div')
     print_statistics(rrt_fast_cost, 'RRT Fast')
-    # print_statistics(ga_cost, 'GA')
+    if use_ga:
+        print_statistics(ga_cost, 'GA')
     print("\n\n\n")
 
     print("NUMBER OF TURNS ANALYSIS:")
@@ -1368,7 +1427,8 @@ def main():
     print_statistics(rrt_div_nb_of_turns, 'RRT Div')
     print_statistics(rrt_fast_nb_of_turns, 'RRT Fast')
     print_statistics(rrt_star_nb_of_turns, 'RRT Star')
-    # print_statistics(ga_nb_of_turns, 'GA')
+    if use_ga:
+        print_statistics(ga_nb_of_turns, 'GA')
     print("\n\n\n")
 
     print("SMOOTHNESS ANALYSIS:")
@@ -1377,7 +1437,8 @@ def main():
     print_statistics(rrt_div_smoothness, 'RRT Div')
     print_statistics(rrt_fast_smoothness, 'RRT Fast')
     print_statistics(rrt_star_smoothness, 'RRT Star')
-    # print_statistics(ga_smoothness, 'GA')
+    if use_ga:
+        print_statistics(ga_smoothness, 'GA')
 
     mean_path_lengths = np.nanmean(path_lengths)
     mean_number_of_turns = np.nanmean(number_of_turns)
@@ -1390,7 +1451,7 @@ def main():
     plot_deviations(methods, [path_lengths, number_of_turns, smoothness, execution_times, energy_costs], criteria[:-1],
                     mean_values)
 
-    write_excel = True
+    write_excel = False
     if write_excel:
         current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f'result{current_time}.xlsx'
@@ -1421,12 +1482,14 @@ def main():
                 'Execution Time': rrt_star_t_exec,
                 'Cost': rrt_star_cost
             }
-            # 'GA': {
-            #     'Path': rrt_star_list,
-            #     'Execution Time': rrt_star_t_exec,
-            #     'Cost': rrt_star_cost
-            # }
         }
+        if use_ga:
+            data['GA'] = {
+                'Path': rrt_star_list,
+                'Execution Time': rrt_star_t_exec,
+                'Cost': rrt_star_cost
+            }
+
         print("Write Excel")
 
         with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:

@@ -149,7 +149,8 @@ def play_move(moves, grid, draw=False):
             fitness -= 2500
             return PlayRet.MISS, fitness
 
-        if grid[robot_y + dy][robot_x + dx] == MapState.GOAL.value:
+        if (grid[robot_y + dy][robot_x + dx] == MapState.GOAL.value or
+                (goal_x == robot_x + dx and goal_y == robot_y + dy)):
             fitness += 2500
             return PlayRet.SCORE, fitness
 
@@ -238,8 +239,8 @@ if __name__ == "__main__":
 
     print_map(matrix)
 
-    best_moves_, best_fitness_ = genetic_algorithm(population_size=1000, move_length=15, generations=100,
-                                                   mutation_rate=0.25, grid=matrix, max_time=10_000_000)
+    best_fitness_, best_moves_, _, _ = genetic_algorithm(population_size=10000, move_length=15, generations=100,
+                                                         mutation_rate=0.25, grid=matrix, max_time=10_000_000_000_000)
     print("Best moves:", best_moves_)
     print("Best fitness:", best_fitness_)
 

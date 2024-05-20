@@ -283,6 +283,7 @@ def plot_complete_scan(path_scan1, path_scan2):
         y_lidar2 = np.array([center_y + dists_lidar2[idx_y] * sin_list[idx_y] for idx_y in range(nbOfRanges)])
 
         filter_std = False
+        filter_dbscan = True
 
         if sum(intensity_lidar1) != 0 and filter_std:
             mean_intensity = np.mean(intensity_lidar1)
@@ -313,23 +314,25 @@ def plot_complete_scan(path_scan1, path_scan2):
         min_samples = 5
 
         lidar_data1 = np.column_stack((x_lidar1, y_lidar1))
+        lidar_data2 = np.column_stack((x_lidar2, y_lidar2))
+
         # lidar_data1 = lidar_data1[(~(np.isnan(lidar_data1) & ~np.isinf(lidar_data1))).any(axis=1)]
 
-        dbscan = DBSCAN(eps=epsilon, min_samples=min_samples)
-        clusters = dbscan.fit_predict(lidar_data1)
+        if filter_dbscan:
+            dbscan = DBSCAN(eps=epsilon, min_samples=min_samples)
+            clusters = dbscan.fit_predict(lidar_data1)
 
-        lidar_data1 = lidar_data1[clusters != -1]
+            lidar_data1 = lidar_data1[clusters != -1]
 
-        x_lidar1 = lidar_data1[:, 0]
-        y_lidar1 = lidar_data1[:, 1]
+            x_lidar1 = lidar_data1[:, 0]
+            y_lidar1 = lidar_data1[:, 1]
 
-        lidar_data2 = np.column_stack((x_lidar2, y_lidar2))
-        # lidar_data2 = lidar_data2[(~(np.isnan(lidar_data2) & ~np.isinf(lidar_data2))).any(axis=1)]
+            # lidar_data2 = lidar_data2[(~(np.isnan(lidar_data2) & ~np.isinf(lidar_data2))).any(axis=1)]
 
-        dbscan = DBSCAN(eps=epsilon, min_samples=min_samples)
-        clusters = dbscan.fit_predict(lidar_data2)
+            dbscan = DBSCAN(eps=epsilon, min_samples=min_samples)
+            clusters = dbscan.fit_predict(lidar_data2)
 
-        lidar_data2 = lidar_data2[clusters != -1]
+            lidar_data2 = lidar_data2[clusters != -1]
 
         x_lidar2 = lidar_data2[:, 0]
         y_lidar2 = lidar_data2[:, 1]
@@ -338,11 +341,13 @@ def plot_complete_scan(path_scan1, path_scan2):
         if plot_one_filter:
             lidar_data = np.column_stack((x_lidar, y_lidar))
             lidar_data = lidar_data[~np.isnan(lidar_data).any(axis=1)]
+            filtered_data = []
 
-            dbscan = DBSCAN(eps=epsilon, min_samples=min_samples)
-            clusters = dbscan.fit_predict(lidar_data)
+            if filter_dbscan:
+                dbscan = DBSCAN(eps=epsilon, min_samples=min_samples)
+                clusters = dbscan.fit_predict(lidar_data)
 
-            filtered_data = lidar_data[clusters != -1]
+                filtered_data = lidar_data[clusters != -1]
 
             plt.figure(figsize=(12, 6))
 
@@ -372,9 +377,10 @@ def plot_complete_scan(path_scan1, path_scan2):
                 plt.subplot(1, 2, 2)
                 plt.title('Filtered LiDAR Data (No points)')
                 plt.axis('off')
+
             legend_handles = [plt.Rectangle((0, 0), 1, 1, color='white') for _ in range(2)]
             legend_labels = [f"Epsilon: {epsilon}", f"Minimum samples: {min_samples}"]
-            plt.legend(legend_handles, legend_labels, loc='upper right')
+            plt.legend(legend_handles, legend_labels, loc='upper right', fontsize="200" )
 
             plt.tight_layout()
 
@@ -418,7 +424,7 @@ def plot_complete_scan(path_scan1, path_scan2):
             plt.xlim(x_min, x_max)
             plt.ylim(y_min, y_max)
 
-            test_astar = True
+            test_astar = False
             if test_astar:
                 path_astar = astar(map_matrix, (robot_point[0], robot_point[1]), [goal[1], goal[0]])
                 # noinspection PyTypeChecker
@@ -507,7 +513,6 @@ def plot_complete_scan(path_scan1, path_scan2):
         plt.grid()
         plt.tight_layout()
         plt.pause(Ts)
-        plt.pause(1000)
         plt.clf()
 
 
@@ -635,5 +640,4 @@ if __name__ == '__main__':
     map_cmap = ListedColormap(colors, name='color_map')
     bounds = [i + 1 for i in range(len(colors) + 1)]
     map_norm = BoundaryNorm(bounds, len(bounds) - 1)
-    print("hello")
     main_local()
