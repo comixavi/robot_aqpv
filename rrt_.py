@@ -57,7 +57,6 @@ class NodeRRTStar:
 
 
 def random_pos(rows, cols):
-
     x = random.randint(0, cols - 1)
     y = random.randint(0, rows - 1)
     # print(rows, "x", cols, " ", y, "x", x)
@@ -160,7 +159,7 @@ def obstacle_collide_bresenham_line(grid, current_pos_x, current_pos_y, new_pose
         # j = min(point[0], len(grid)-1)
         # i = min(point[1], len(grid[0])-1)
 
-        if point[0] > len(grid)-1 or point[1] > len(grid[0])-1:
+        if point[0] > len(grid) - 1 or point[1] > len(grid[0]) - 1:
             return True
 
         if grid[j, i] == MapState.OBSTACLE.value or grid[j, i] == MapState.EXTENDED_OBSTACLE.value:
@@ -591,8 +590,8 @@ def rrt_div(grid, start, goal, lim=1_000, max_t=10):
         min_cost = float('inf')
         new_pose = None
 
-        points = random_quad(current_pos.x, current_pos.y, max(0, current_pos.x-5), max(0, current_pos.y-5),
-                             min(current_pos.x+5, cols-1), min(current_pos.y+5, cols-1))
+        points = random_quad(current_pos.x, current_pos.y, max(0, current_pos.x - 5), max(0, current_pos.y - 5),
+                             min(current_pos.x + 5, cols - 1), min(current_pos.y + 5, cols - 1))
 
         for point in points:
             if obstacle_collide_bresenham_line(grid, *point, current_pos.x, current_pos.y, checked_combos):
@@ -828,7 +827,7 @@ def plot_blank_grid(grid, title):
 
 def plot_grid(grid, path, text):
     colors = ['blue', 'white', 'black', (0.6, 0.6, 0.6), 'green']
-    Ts = 6
+    Ts = 4
     map_cmap = ListedColormap(colors, name='color_map')
     bounds = [i + 1 for i in range(len(colors) + 1)]
     map_norm = BoundaryNorm(bounds, len(bounds) - 1)
@@ -847,7 +846,7 @@ def plot_grid(grid, path, text):
     plt.ylabel('Y')
     plt.xlim(x_min, x_max)
     plt.ylim(y_min, y_max)
-    color = (28/255, 43/255, 244/255, 1)
+    color = (28 / 255, 43 / 255, 244 / 255, 1)
 
     if path is not None:
         nb_of_nodes, path, times, costs = path
@@ -997,6 +996,42 @@ def plot_comparison(methods, path_lengths, number_of_turns, smoothness, executio
     plt.show()
 
 
+def plot_comparison_individual(methods, path_lengths, number_of_turns, smoothness, execution_times, energy_costs,
+                               fail_nb, criteria):
+    data = [
+        path_lengths,
+        number_of_turns,
+        smoothness,
+        execution_times,
+        energy_costs,
+        fail_nb
+    ]
+
+    num_methods = len(methods)
+    num_criteria = len(criteria)
+
+    # Iterate over each method and create a separate figure for each
+    for j in range(num_methods):
+        fig, ax = plt.subplots(figsize=(8, 6))  # Smaller figure size for individual plots
+
+        bar_width = 0.5
+        index = np.arange(num_criteria)  # Index for criteria
+
+        # Plot bars for each criterion for the current method
+        for i in range(num_criteria):
+            ax.bar(index[i] + bar_width, data[i][j], bar_width, label=criteria[i])
+
+        ax.set_xlabel('Criteria')
+        ax.set_ylabel('Values')
+        ax.set_title(f'Comparison of {methods[j]} by Various Criteria')
+        ax.set_xticks(index + bar_width)
+        ax.set_xticklabels(criteria)  # Label with criterion names
+        ax.legend()
+
+        plt.tight_layout()
+        plt.show()
+
+
 def eliminate_duplicates(lst):
     if not lst:
         return []
@@ -1042,8 +1077,8 @@ def plot_deviations(methods, data, criteria, mean_values):
 
 
 def main():
-    simple_grid = False
-    random_grid = True
+    simple_grid = True
+    random_grid = False
     lidar_grid = False
     grid = None
 
@@ -1052,6 +1087,7 @@ def main():
 
     frame_by_frame = False
     use_ga = True
+    use_astar = False
 
     if simple_grid:
         shape_lines = 5
@@ -1141,16 +1177,13 @@ def main():
 
         grid = np.full((shape_lines, shape_col), MapState.FREE.value, dtype=int)
 
-        for i in range(shape_lines-1):
-            for j in range(shape_col-1):
+        for i in range(shape_lines - 1):
+            for j in range(shape_col - 1):
                 grid[i, j] = grid_aux[i][j]
 
         grid[robot_pos] = MapState.ROBOT.value
         grid[(goal[1], goal[0])] = MapState.GOAL.value
 
-        # print(shape_lines, "x", shape_col)
-        # plot_blank_grid(grid)
-        # input()
     if random_grid:
         grid = generate_grid_with_obstacles(5)
         robot_pos = (0, 0)
@@ -1159,45 +1192,45 @@ def main():
         grid[robot_pos] = MapState.ROBOT.value
         grid[goal] = MapState.GOAL.value
 
-    nb_of_test = 100
+    nb_of_test = 10
 
-    astar_nb_list, astar_nb_of_turns, astar_smoothness, astar_nb_t_exec, astar_nb_cost, astar_nb_fails = [], [], [], [], [], 0
     rrt_nb_list, rrt_nb_of_turns, rrt_smoothness, rrt_nb_t_exec, rrt_nb_cost, rrt_nb_fails = [], [], [], [], [], 0
     rrt_fast_list, rrt_fast_nb_of_turns, rrt_fast_smoothness, rrt_fast_t_exec, rrt_fast_cost, rrt_fast_fails = [], [], [], [], [], 0
     rrt_div_list, rrt_div_nb_of_turns, rrt_div_smoothness, rrt_div_t_exec, rrt_div_cost, rrt_div_fails = [], [], [], [], [], 0
     rrt_con_list, rrt_con_nb_of_turns, rrt_con_smoothness, rrt_con_t_exec, rrt_con_cost, rrt_con_fails = [], [], [], [], [], 0
     rrt_star_list, rrt_star_nb_of_turns, rrt_star_smoothness, rrt_star_t_exec, rrt_star_cost, rrt_star_fails = [], [], [], [], [], 0
+
     ga_list, ga_nb_of_turns, ga_smoothness, ga_t_exec, ga_cost, ga_fails = [], [], [], [], [], 0
+    astar_nb_list, astar_nb_of_turns, astar_smoothness, astar_nb_t_exec, astar_nb_cost, astar_nb_fails = [], [], [], [], [], 0
 
     max_time = 600_000_000
-    lim_iter = 250_000
-    print(robot_pos)
-    print(goal)
+    lim_iter = 500_000
 
-    astar_sol = astar(grid, robot_pos, goal)
+    if use_astar:
+        astar_sol = astar(grid, robot_pos, goal)
 
-    if astar_sol is not None:
-        if frame_by_frame:
-            for j in range(len(astar_sol[1]) - 1):
-                rrt_sol_aux = astar_sol[0], astar_sol[1][0:j + 1], astar_sol[2], astar_sol[3]
-                plot_grid(grid=grid, path=rrt_sol_aux, text='A*')
+        if astar_sol is not None:
+            if frame_by_frame:
+                for j in range(len(astar_sol[1]) - 1):
+                    rrt_sol_aux = astar_sol[0], astar_sol[1][0:j + 1], astar_sol[2], astar_sol[3]
+                    plot_grid(grid=grid, path=rrt_sol_aux, text='A*')
+            else:
+                plot_grid(grid=grid, path=astar_sol, text='A*')
+                astar_nb_list.append(len(astar_sol[1]))
+            astar_nb_t_exec.append(1)  # astar_sol[2] / 1_000_000)
+            astar_nb_cost.append(astar_sol[3])
+            astar_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(astar_sol[1])))
+            astar_smoothness.append(calculate_smoothness(eliminate_duplicates(astar_sol[1])))
         else:
-            plot_grid(grid=grid, path=astar_sol, text='A*')
-            astar_nb_list.append(len(astar_sol[1]))
-        astar_nb_t_exec.append(astar_sol[2] / 1_000_000)
-        astar_nb_cost.append(astar_sol[3])
-        astar_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(astar_sol[1])))
-        astar_smoothness.append(calculate_smoothness(eliminate_duplicates(astar_sol[1])))
-    else:
-        astar_nb_list.append(np.nan)
-        astar_nb_t_exec.append(np.nan)
-        astar_nb_cost.append(np.nan)
-        astar_nb_of_turns.append(np.nan)
-        astar_smoothness.append(np.nan)
-        astar_nb_fails += 1
+            astar_nb_list.append(np.nan)
+            astar_nb_t_exec.append(np.nan)
+            astar_nb_cost.append(np.nan)
+            astar_nb_of_turns.append(np.nan)
+            astar_smoothness.append(np.nan)
+            astar_nb_fails += 1
 
     for i in range(nb_of_test):
-        print(i/nb_of_test)
+        print(i / nb_of_test)
 
         if random_grid:
             grid = generate_grid_with_obstacles(5)
@@ -1207,11 +1240,34 @@ def main():
             grid[robot_pos] = MapState.ROBOT.value
             grid[goal] = MapState.GOAL.value
 
+        if use_astar:
+            astar_sol = astar(grid, robot_pos, goal)
+
+            if astar_sol is not None:
+                if frame_by_frame:
+                    for j in range(len(astar_sol[1]) - 1):
+                        rrt_sol_aux = astar_sol[0], astar_sol[1][0:j + 1], astar_sol[2], astar_sol[3]
+                        plot_grid(grid=grid, path=rrt_sol_aux, text='A*')
+                else:
+                    plot_grid(grid=grid, path=astar_sol, text='A*')
+                    astar_nb_list.append(len(astar_sol[1]))
+                astar_nb_t_exec.append(1)  # astar_sol[2] / 1_000_000)
+                astar_nb_cost.append(astar_sol[3])
+                astar_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(astar_sol[1])))
+                astar_smoothness.append(calculate_smoothness(eliminate_duplicates(astar_sol[1])))
+            else:
+                astar_nb_list.append(np.nan)
+                astar_nb_t_exec.append(np.nan)
+                astar_nb_cost.append(np.nan)
+                astar_nb_of_turns.append(np.nan)
+                astar_smoothness.append(np.nan)
+                astar_nb_fails += 1
+
         rrt_sol = rrt(grid, robot_pos, goal, lim_iter, max_time)
         if rrt_sol is not None:
             if frame_by_frame:
-                for j in range(len(rrt_sol[1])-1):
-                    rrt_sol_aux = rrt_sol[0], rrt_sol[1][0:j+1], rrt_sol[2], rrt_sol[3]
+                for j in range(len(rrt_sol[1]) - 1):
+                    rrt_sol_aux = rrt_sol[0], rrt_sol[1][0:j + 1], rrt_sol[2], rrt_sol[3]
                     plot_grid(grid=grid, path=rrt_sol_aux, text='RRT')
             else:
                 plot_grid(grid=grid, path=rrt_sol, text='RRT')
@@ -1332,6 +1388,7 @@ def main():
                 for ind, move in enumerate(ga_solution[1]):
                     loc_goal = (path_ga[ind][0] + move[0], path_ga[ind][1] + move[1])
                     path_ga.append(loc_goal)
+                ga_solution = ga_solution[0], path_ga, ga_solution[2], ga_solution[3]
 
                 if frame_by_frame:
                     for j in range(len(path_ga) - 1):
@@ -1342,8 +1399,8 @@ def main():
                     ga_list.append(len(path_ga[1]))
                 ga_t_exec.append(ga_solution[2] / 1_000_000)
                 ga_cost.append(ga_solution[3])
-                ga_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(path_ga[1])))
-                ga_smoothness.append(calculate_smoothness(eliminate_duplicates(path_ga[1])))
+                ga_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(path_ga)))
+                ga_smoothness.append(calculate_smoothness(eliminate_duplicates(path_ga)))
             else:
                 ga_list.append(np.nan)
                 ga_t_exec.append(np.nan)
@@ -1379,6 +1436,15 @@ def main():
         rrt_fast_fails / nb_of_test * 100, rrt_star_fails / nb_of_test * 100
     ]
 
+    if use_astar:
+        methods.append('A Star')
+        path_lengths.append(np.nanmean(astar_nb_list))
+        number_of_turns.append(np.nanmean(astar_nb_of_turns))
+        smoothness.append(np.nanmean(astar_smoothness))
+        execution_times.append(np.nanmean(astar_nb_t_exec))
+        energy_costs.append(np.nanmean(astar_nb_cost))
+        number_of_fails.append(astar_nb_fails / nb_of_test * 100)
+
     if use_ga:
         methods.append('GA')
         path_lengths.append(np.nanmean(ga_list))
@@ -1391,8 +1457,25 @@ def main():
     criteria = ['Number of Nodes', 'Number of Turns', 'Smoothness',
                 'Execution Time', 'Path Length [m]', 'Percentage of Failed Tests']
 
-    plot_comparison(methods, path_lengths, number_of_turns, smoothness, execution_times, energy_costs, number_of_fails,
-                    criteria)
+    variables = [
+        ('methods', methods),
+        ('path_lengths', path_lengths),
+        ('number_of_turns', number_of_turns),
+        ('smoothness', smoothness),
+        ('execution_times', execution_times),
+        ('energy_costs', energy_costs),
+        ('number_of_fails', number_of_fails),
+        ('criteria', criteria)
+    ]
+
+    for name, var in variables:
+        print(name, var)
+
+    plot_comparison_individual(methods, path_lengths, number_of_turns, smoothness,
+                               execution_times, energy_costs, number_of_fails, criteria)
+
+    plot_comparison(methods, path_lengths, number_of_turns, smoothness,
+                    execution_times, energy_costs, number_of_fails, criteria)
 
     print("NUMBER OF TRIES ANALYSIS:")
     print_statistics(rrt_nb_list, 'RRT')
