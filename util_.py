@@ -7,7 +7,7 @@ def bresenham_line(x0, y0, x1, y1):
     err = dx - dy
 
     while True:
-        points.append((x0, y0))
+        points.append((y0, x0))
 
         if x0 == x1 and y0 == y1:
             break

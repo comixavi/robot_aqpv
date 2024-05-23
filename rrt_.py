@@ -162,7 +162,7 @@ def obstacle_collide_bresenham_line(grid, current_pos_x, current_pos_y, new_pose
         if point[0] > len(grid) - 1 or point[1] > len(grid[0]) - 1:
             return True
 
-        if grid[j, i] == MapState.OBSTACLE.value or grid[j, i] == MapState.EXTENDED_OBSTACLE.value:
+        if grid[i, j] == MapState.OBSTACLE.value or grid[i, j] == MapState.EXTENDED_OBSTACLE.value:
             if checked_combos is not None:
                 checked_combos[(current_pos_x, current_pos_y, new_pose_x, new_pose_y)] = True
             return True
@@ -256,11 +256,14 @@ def nearest_node(vertices, new_node_x, new_node_y):
 def rrt(grid, start, goal, lim=1_000, max_t=10):
     rows, cols = len(grid), len(grid[0])
     counter = 0
-    max_dist = 10
+    max_dist = 32
 
-    current_pos = NodeRRT(*start)
+    goal = goal[1], goal[0]
+
+    current_pos = NodeRRT(start[1], start[0])
     moves = [current_pos]
     start_time = time.time_ns()
+    # goal/start = y, x
 
     while counter < lim and time.time_ns() - start_time < max_t:
         counter += 1
@@ -277,15 +280,15 @@ def rrt(grid, start, goal, lim=1_000, max_t=10):
             continue
 
         if dist > max_dist:
-            new_pose_x, new_pose_y = points[max_dist]
-            points = points[0:max_dist + 1]
+            # new_pose_x, new_pose_y = points[max_dist]
+            points = points[0:max_dist]
 
         break_key = False
         for point in points:
             y = point[0]
             x = point[1]
 
-            if grid[x, y] == MapState.OBSTACLE.value or grid[x, y] == MapState.EXTENDED_OBSTACLE.value:
+            if grid[y, x] == MapState.OBSTACLE.value or grid[y, x] == MapState.EXTENDED_OBSTACLE.value:
                 break_key = True
                 break
 
@@ -293,11 +296,11 @@ def rrt(grid, start, goal, lim=1_000, max_t=10):
             continue
 
         for point in points:
-            new_node = NodeRRTStar(point[0], point[1])
+            new_node = NodeRRTStar(point[1], point[0])
             new_node.parent = nearest_nd
             moves.append(new_node)
 
-            if goal[0] == point[1] and goal[1] == point[0]:
+            if goal[1] == point[0] and goal[0] == point[1]:
                 path = [goal]
                 current_node = new_node
 
@@ -320,10 +323,10 @@ def rrt(grid, start, goal, lim=1_000, max_t=10):
                     points_in = bresenham_line(path[ind][1], path[ind][0], path[ind + 1][1], path[ind + 1][0])
 
                     for point_in in points_in[1:]:
-                        final_pt.append((point_in[1], point_in[0]))
+                        final_pt.append((point_in[0], point_in[1]))
                         x = point_in[1]
                         y = point_in[0]
-                        if grid[x, y] == MapState.OBSTACLE.value or grid[x, y] == MapState.EXTENDED_OBSTACLE.value:
+                        if grid[y, x] == MapState.OBSTACLE.value or grid[y, x] == MapState.EXTENDED_OBSTACLE.value:
                             retry = True
                 if not retry:
                     return counter, final_pt, time.time_ns() - start_time, total_distance(final_pt)
@@ -331,82 +334,7 @@ def rrt(grid, start, goal, lim=1_000, max_t=10):
     return None
 
 
-def rrt_connect(grid, start, goal, lim=1_000, max_t=10):
-    tr1 = [NodeRRTStar(*start)]
-    tr2 = [NodeRRTStar(goal[0], goal[1])]
-    trees = [tr1, tr2]
-    # max_dist = 10
-    counter = 0
-    start_time = time.time_ns()
-
-    while counter < lim and time.time_ns() - start_time < max_t:
-        counter += 1
-
-        for tree in trees:
-            random_node = random_pos(len(grid), len(grid[0]))
-
-            if obstacle_collide(grid, random_node):
-                continue
-
-            dist, nearest_nd, path = nearest_node(tree, *random_node)
-
-            if dist == 0:
-                continue
-
-            # if dist > max_dist:
-            #     path = path[:max_dist + 1]
-            #     random_node = (path[-1][0], path[-1][1])
-
-            break_key = False
-            for point in path:
-                y = point[0]
-                x = point[1]
-                # print(point, end=" ")
-                if grid[x, y] == MapState.OBSTACLE.value or grid[x, y] == MapState.EXTENDED_OBSTACLE.value:
-                    break_key = True
-                    break
-            # print("\n")
-
-            if break_key:
-                continue
-
-            new_node = NodeRRTStar(*random_node)
-            new_node.parent = nearest_nd
-            tree.append(new_node)
-
-            other_tree = tr2 if tree is tr1 else tr1
-            dist, other_nearest, path = nearest_node(other_tree, new_node.x, new_node.y)
-
-            break_key = False
-            for point in path:
-                y = point[0]
-                x = point[1]
-                # print(point, end=" ")
-
-                if grid[x, y] == MapState.OBSTACLE.value or grid[x, y] == MapState.EXTENDED_OBSTACLE.value:
-                    break_key = True
-                    break
-            # print("\n")
-
-            if break_key:
-                continue
-
-            if new_node == other_nearest:
-                if tr2 == tree:
-                    pt = reconstruct_path(grid, new_node, other_nearest)
-                else:
-                    pt = reconstruct_path(grid, other_nearest, new_node)
-
-                if pt is not None:
-                    return counter * 2, pt, time.time_ns() - start_time, total_distance(pt)
-                else:
-                    tr1 = [NodeRRTStar(*start)]
-                    tr2 = [NodeRRTStar(*goal)]
-                    trees = [tr1, tr2]
-    return None
-
-
-def reconstruct_path(grid, node_from_tr1, node_from_tr2):
+def reconstruct_path_con(grid, node_from_tr1, node_from_tr2):
     path1 = []
     current = node_from_tr1
     while current:
@@ -433,10 +361,93 @@ def reconstruct_path(grid, node_from_tr1, node_from_tr2):
             y = point_in[1]
             if grid[x, y] == MapState.OBSTACLE.value or grid[x, y] == MapState.EXTENDED_OBSTACLE.value:
                 return None
+    final_pt[0] = final_pt[0][::-1]
 
-    final_pt.append(path[-1])
+    final_pt.append(path[-1][::-1])
 
     return final_pt
+
+
+def rrt_connect(grid, start, goal, lim=1_000, max_t=10):
+    tr1 = [NodeRRTStar(*start[::-1])]
+    tr2 = [NodeRRTStar(*goal[::-1])]
+
+    trees = [tr1, tr2]
+
+    counter = 0
+    start_time = time.time_ns()
+    # print(len(grid), len(grid[0]))
+    # print("Start: ", start)
+    # print("Goal: ", goal)
+
+    while counter < lim and time.time_ns() - start_time < max_t:
+        counter += 1
+
+        for tree in trees:
+            random_node = random_pos(len(grid), len(grid[0]))
+            #print("Punctul random: ", random_node)
+
+            if obstacle_collide(grid, random_node):
+                continue
+
+            dist, nearest_nd, path = nearest_node(tree, *random_node)
+            # print("Cel mai aproape nod: ", nearest_nd)
+            # print("")
+            if dist == 0:
+                continue
+
+            # if dist > max_dist:
+            #     path = path[:max_dist + 1]
+            #     random_node = (path[-1][0], path[-1][1])
+
+            break_key = False
+            for point in path:
+                y = point[0]
+                x = point[1]
+
+                # print(point, end=" ")
+                if grid[y, x] == MapState.OBSTACLE.value or grid[y, x] == MapState.EXTENDED_OBSTACLE.value:
+                    break_key = True
+                    break
+            # print("\n")
+
+            if break_key:
+                continue
+
+            new_node = NodeRRTStar(*random_node)
+            new_node.parent = nearest_nd
+            tree.append(new_node)
+
+            other_tree = tr2 if tree is tr1 else tr1
+            dist, other_nearest, path = nearest_node(other_tree, new_node.x, new_node.y)
+
+            break_key = False
+            for point in path:
+                y = point[0]
+                x = point[1]
+                # print(point, end=" ")
+
+                if grid[y, x] in (MapState.OBSTACLE.value, MapState.EXTENDED_OBSTACLE.value):
+                    break_key = True
+                    break
+            # print("\n")
+
+            if break_key:
+                continue
+
+            if new_node == other_nearest:
+                if tr2 == tree:
+                    pt = reconstruct_path_con(grid, new_node, other_nearest)
+                else:
+                    pt = reconstruct_path_con(grid, other_nearest, new_node)
+
+                if pt is not None:
+                    return counter * 2, pt, time.time_ns() - start_time, total_distance(pt)
+                else:
+                    tr1 = [NodeRRTStar(*start[::-1])]
+                    tr2 = [NodeRRTStar(*goal[::-1])]
+                    trees = [tr1, tr2]
+    return None
 
 
 def rewire_rrt_star_with_check(grid, tree, new_node, max_radius=36, check_fct=obstacle_collide_bresenham_line):
@@ -456,8 +467,8 @@ def rewire_rrt_star_with_check(grid, tree, new_node, max_radius=36, check_fct=ob
 def chain_rrt_star(new_node, nr_node):
     if nr_node is not None:
         new_node.parent = nr_node
-        nr_node.children.append(new_node)
         new_node.cost = nr_node.cost + distance(new_node, nr_node)
+        nr_node.children.append(new_node)
 
 
 def rewire_rrt_star(tree, new_node, max_radius):
@@ -475,9 +486,8 @@ def rewire_rrt_star(tree, new_node, max_radius):
 
 def update_children_costs(node):
     for child in node.children:
-        old_cost = child.cost
         new_cost = node.cost + distance(node, child)
-        if new_cost < old_cost:
+        if new_cost < child.cost:
             child.cost = new_cost
             update_children_costs(child)
 
@@ -490,6 +500,11 @@ def random_rrt_pos_star(rows, cols):
 
 
 def random_rrt_pos_max_dist(x, y, rows, cols, max_dist):
+    if max(x - max_dist, 0) > min(x + max_dist, cols - 1):
+        return None
+    if max(y - max_dist, 0) > min(y + max_dist, rows - 1):
+        return None
+
     return (
         random.randint(max(x - max_dist, 0), min(x + max_dist, cols - 1)),
         random.randint(max(y - max_dist, 0), min(y + max_dist, rows - 1))
@@ -503,16 +518,46 @@ def obstacle_collide_star(grid, x, y):
 def nearest_node_star(tree, x, y):
     nearest = None
     min_distance = float('inf')
+
     for node in tree:
         dist = np.sqrt((node.x - x) ** 2 + (node.y - y) ** 2)
         if dist < min_distance:
             nearest = node
             min_distance = dist
+
     return nearest, min_distance
 
 
+def construct_path_star(grid, node):
+    path = []
+
+    while node:
+        path.append((node.x, node.y))
+        node = node.parent
+
+    path = path[::-1]
+
+    final_pt = []
+
+    for ind, local_pt in enumerate(path[:-1]):
+        points_in = bresenham_line(path[ind][0], path[ind][1], path[ind + 1][0], path[ind + 1][1])
+
+        for point_in in points_in:
+            final_pt.append((point_in[1], point_in[0]))
+
+            y = point_in[0]
+            x = point_in[1]
+
+            if grid[y, x] in (MapState.OBSTACLE.value, MapState.EXTENDED_OBSTACLE.value):
+                return None
+
+    final_pt.append(path[-1])
+
+    return final_pt
+
+
 def rrt_star(grid, start, goal, lim=1000, max_dist=10, max_t=10):
-    tree = [NodeRRTStar(*start)]
+    tree = [NodeRRTStar(*start[::-1])]
     counter = 0
     start_time = time.time_ns()
 
@@ -525,47 +570,24 @@ def rrt_star(grid, start, goal, lim=1000, max_dist=10, max_t=10):
             continue
 
         nr_node, _ = nearest_node_star(tree, rand_x, rand_y)
+
+        if nr_node is None:
+            continue
+
         new_node = NodeRRTStar(rand_x, rand_y)
+
         chain_rrt_star(new_node, nr_node)
         rewire_rrt_star(tree, new_node, max_dist)
         tree.append(new_node)
 
-        if (new_node.x, new_node.y) == goal:
+        if (new_node.y, new_node.x) == goal:
             rec_path = construct_path_star(grid, new_node)
             if rec_path is not None:
                 return counter, rec_path, time.time_ns() - start_time, total_distance(rec_path)
             else:
-                tree = [NodeRRTStar(*start)]
+                tree = [NodeRRTStar(*start[::-1])]
 
     return None
-
-
-def construct_path_star(grid, node):
-    path = []
-
-    while node:
-        path.append((node.x, node.y))
-        node = node.parent
-
-    path = path[::-1]
-
-    final_pt = [path[0]]
-
-    for ind, local_pt in enumerate(path[:-1]):
-        points_in = bresenham_line(path[ind][0], path[ind][1], path[ind + 1][0], path[ind + 1][1])
-
-        for point_in in points_in:
-            final_pt.append((point_in[0], point_in[1]))
-
-            x = point_in[0]
-            y = point_in[1]
-
-            if grid[x, y] == MapState.OBSTACLE.value or grid[x, y] == MapState.EXTENDED_OBSTACLE.value:
-                return None
-
-    final_pt.append(path[-1])
-
-    return final_pt
 
 
 def chain_rrt_div(new_node, nearest_nd):
@@ -578,11 +600,12 @@ def chain_rrt_div(new_node, nearest_nd):
 
 
 def rrt_div(grid, start, goal, lim=1_000, max_t=10):
-    rows, cols = len(grid), len(grid[0])
+    rows, cols = grid.shape
     counter = 0
-    current_pos = NodeRRTStar(start[0], start[1])
+    current_pos = NodeRRTStar(*start[::-1])
     checked_combos = dict()
     moves = [current_pos]
+    goal = goal[::-1]
 
     start_time = time.time_ns()
 
@@ -600,7 +623,7 @@ def rrt_div(grid, start, goal, lim=1_000, max_t=10):
             local_cost = distance(point, goal)
             if local_cost < min_cost:
                 min_cost = local_cost
-                new_pose = NodeRRTStar(*point)
+                new_pose = NodeRRTStar(point[0], point[1])
 
         if new_pose is None:
             continue
@@ -613,7 +636,7 @@ def rrt_div(grid, start, goal, lim=1_000, max_t=10):
         for point in points:
             y = point[0]
             x = point[1]
-            if grid[x, y] == MapState.OBSTACLE.value or grid[x, y] == MapState.EXTENDED_OBSTACLE.value:
+            if grid[y, x] == MapState.OBSTACLE.value or grid[y, x] == MapState.EXTENDED_OBSTACLE.value:
                 continue
 
         chain_rrt_div(new_pose, nearest_nd)
@@ -641,39 +664,37 @@ def rrt_div(grid, start, goal, lim=1_000, max_t=10):
                 points_in = bresenham_line(path[ind][0], path[ind][1], path[ind + 1][0], path[ind + 1][1])
 
                 for point_in in points_in:
-                    final_pt.append((point_in[0], point_in[1]))
-                    x = point_in[0]
-                    y = point_in[1]
+                    final_pt.append((point_in[1], point_in[0]))
+                    y = point_in[0]
+                    x = point_in[1]
                     if grid[x, y] == MapState.OBSTACLE.value or grid[x, y] == MapState.EXTENDED_OBSTACLE.value:
                         retry = True
 
             if not retry:
                 return counter, final_pt, time.time_ns() - start_time, total_distance(final_pt)
             else:
-                current_pos = NodeRRTStar(start[0], start[1])
+                current_pos = NodeRRTStar(start[1], start[0])
                 moves = [current_pos]
     return None
 
 
 def random_pos_fast(counter_close, goal, rows, cols):
     p = 0.10 if counter_close < 3 else 0.25 if counter_close < 5 else 0.50
-
+    # print(p)
     if random.randint(1, 100) / 100 < p:
-        return random_rrt_pos_max_dist(goal[0], goal[1], rows, cols, int(1 / p))
+        return random_rrt_pos_max_dist(goal[1], goal[0], rows, cols, int(1 / p))
     else:
         return random_pos(rows, cols)
     pass
 
 
 def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
-    rows, cols = len(grid), len(grid[0])
+    rows, cols = grid.shape
     counter = 0
     counter_close = 0
-    current_pos = NodeRRTStar(start[0], start[1])
+    current_pos = NodeRRTStar(*start[::-1])
     checked_combos = dict()
     moves = [current_pos]
-
-    obs_fct = obstacle_collide_bresenham_line
 
     start_time = time.time_ns()
 
@@ -686,7 +707,7 @@ def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
         if local_pose is None:
             continue
 
-        if obs_fct(grid, *local_pose, current_pos.x, current_pos.y, checked_combos):
+        if obstacle_collide_bresenham_line(grid, *local_pose, current_pos.x, current_pos.y, checked_combos):
             counter_close = 0
             continue
 
@@ -706,7 +727,7 @@ def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
         if dist == 0:
             continue
 
-        if obs_fct(grid, *local_pose, nearest_nd.x, nearest_nd.y, checked_combos):
+        if obstacle_collide_bresenham_line(grid, *local_pose, nearest_nd.x, nearest_nd.y, checked_combos):
             counter_close = 0
             continue
 
@@ -718,7 +739,7 @@ def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
 
         counter += 1
 
-        if goal[0] == new_pose.x and goal[1] == new_pose.y:
+        if goal[1] == new_pose.x and goal[0] == new_pose.y:
             path = []
             current_node = new_pose
 
@@ -734,8 +755,8 @@ def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
 
                 current_node = current_node.parent
 
-            cost = current_node.cost
-            path.append((start[0], start[1]))
+            # cost = current_node.cost
+            path.append((start[1], start[0]))
             path.reverse()
 
             final_pt = [start]
@@ -746,9 +767,9 @@ def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
 
                 for point_in in points_in[1:]:
                     final_pt.append((point_in[1], point_in[0]))
-                    x = point_in[1]
-                    y = point_in[0]
-                    if grid[x, y] == MapState.OBSTACLE.value or grid[x, y] == MapState.EXTENDED_OBSTACLE.value:
+                    x = point_in[0]
+                    y = point_in[1]
+                    if grid[y, x] == MapState.OBSTACLE.value or grid[y, x] == MapState.EXTENDED_OBSTACLE.value:
                         retry = True
 
             final_pt.append(goal)
@@ -827,7 +848,7 @@ def plot_blank_grid(grid, title):
 
 def plot_grid(grid, path, text):
     colors = ['blue', 'white', 'black', (0.6, 0.6, 0.6), 'green']
-    Ts = 4
+    Ts = 1/144
     map_cmap = ListedColormap(colors, name='color_map')
     bounds = [i + 1 for i in range(len(colors) + 1)]
     map_norm = BoundaryNorm(bounds, len(bounds) - 1)
@@ -1077,17 +1098,21 @@ def plot_deviations(methods, data, criteria, mean_values):
 
 
 def main():
-    simple_grid = True
+    def s2ns(sec):
+        return sec*1_000_000_000
+
+    simple_grid = False
     random_grid = False
-    lidar_grid = False
+    lidar_grid = True
     grid = None
 
     robot_pos = None
     goal = None
 
     frame_by_frame = False
-    use_ga = True
-    use_astar = False
+    use_ga = False
+    use_astar = True
+    use_astar_stats = False
 
     if simple_grid:
         shape_lines = 5
@@ -1104,8 +1129,8 @@ def main():
             grid[obstacle] = MapState.OBSTACLE.value
 
     if lidar_grid:
-        robot_pos = (10, 10)
-        goal = (20, 20)
+        robot_pos = (5, 10)
+        goal = (5, 40)
 
         grid_aux = [
             [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
@@ -1182,7 +1207,7 @@ def main():
                 grid[i, j] = grid_aux[i][j]
 
         grid[robot_pos] = MapState.ROBOT.value
-        grid[(goal[1], goal[0])] = MapState.GOAL.value
+        grid[goal] = MapState.GOAL.value
 
     if random_grid:
         grid = generate_grid_with_obstacles(5)
@@ -1203,8 +1228,8 @@ def main():
     ga_list, ga_nb_of_turns, ga_smoothness, ga_t_exec, ga_cost, ga_fails = [], [], [], [], [], 0
     astar_nb_list, astar_nb_of_turns, astar_smoothness, astar_nb_t_exec, astar_nb_cost, astar_nb_fails = [], [], [], [], [], 0
 
-    max_time = 600_000_000
-    lim_iter = 500_000
+    max_time = s2ns(2)
+    lim_iter = 500_000_000
 
     if use_astar:
         astar_sol = astar(grid, robot_pos, goal)
@@ -1240,7 +1265,7 @@ def main():
             grid[robot_pos] = MapState.ROBOT.value
             grid[goal] = MapState.GOAL.value
 
-        if use_astar:
+        if use_astar and random_grid:
             astar_sol = astar(grid, robot_pos, goal)
 
             if astar_sol is not None:
@@ -1436,7 +1461,7 @@ def main():
         rrt_fast_fails / nb_of_test * 100, rrt_star_fails / nb_of_test * 100
     ]
 
-    if use_astar:
+    if use_astar_stats:
         methods.append('A Star')
         path_lengths.append(np.nanmean(astar_nb_list))
         number_of_turns.append(np.nanmean(astar_nb_of_turns))
@@ -1455,7 +1480,7 @@ def main():
         number_of_fails.append(ga_fails / nb_of_test * 100)
 
     criteria = ['Number of Nodes', 'Number of Turns', 'Smoothness',
-                'Execution Time', 'Path Length [m]', 'Percentage of Failed Tests']
+                'Execution Time [ms]', 'Path Length [m]', 'Percentage of Failed Tests']
 
     variables = [
         ('methods', methods),
