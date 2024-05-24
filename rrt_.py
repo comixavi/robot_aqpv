@@ -543,7 +543,7 @@ def construct_path_star(grid, node):
         points_in = bresenham_line(path[ind][0], path[ind][1], path[ind + 1][0], path[ind + 1][1])
 
         for point_in in points_in:
-            final_pt.append((point_in[1], point_in[0]))
+            final_pt.append((point_in[0], point_in[1]))
 
             y = point_in[0]
             x = point_in[1]
@@ -557,6 +557,7 @@ def construct_path_star(grid, node):
 
 
 def rrt_star(grid, start, goal, lim=1000, max_dist=10, max_t=10):
+    rows, cols = grid.shape
     tree = [NodeRRTStar(*start[::-1])]
     counter = 0
     start_time = time.time_ns()
@@ -564,7 +565,7 @@ def rrt_star(grid, start, goal, lim=1000, max_dist=10, max_t=10):
     while counter < lim and time.time_ns() - start_time < max_t:
         counter += 1
 
-        rand_x, rand_y = random_rrt_pos_star(len(grid), len(grid[0]))
+        rand_x, rand_y = random_rrt_pos_star(rows, cols)
 
         if obstacle_collide_star(grid, rand_x, rand_y):
             continue
@@ -608,13 +609,13 @@ def rrt_div(grid, start, goal, lim=1_000, max_t=10):
     goal = goal[::-1]
 
     start_time = time.time_ns()
-
+    dst = 5
     while counter < lim and time.time_ns() - start_time < max_t:
         min_cost = float('inf')
         new_pose = None
 
-        points = random_quad(current_pos.x, current_pos.y, max(0, current_pos.x - 5), max(0, current_pos.y - 5),
-                             min(current_pos.x + 5, cols - 1), min(current_pos.y + 5, cols - 1))
+        points = random_quad(current_pos.x, current_pos.y, max(0, current_pos.x - dst), max(0, current_pos.y - dst),
+                             min(current_pos.x + dst, cols - 1), min(current_pos.y + dst, cols - 1))
 
         for point in points:
             if obstacle_collide_bresenham_line(grid, *point, current_pos.x, current_pos.y, checked_combos):
@@ -707,9 +708,9 @@ def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
         if local_pose is None:
             continue
 
-        if obstacle_collide_bresenham_line(grid, *local_pose, current_pos.x, current_pos.y, checked_combos):
-            counter_close = 0
-            continue
+        # if obstacle_collide_bresenham_line(grid, *local_pose, current_pos.x, current_pos.y, checked_combos):
+        #     counter_close = 0
+        #     continue
 
         # nb_of_new_poses += 1
         # local_cost = distance(local_pose, goal)
@@ -733,7 +734,7 @@ def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
 
         chain_rrt_star(new_pose, nearest_nd)
 
-        current_pos = new_pose
+        # current_pos = new_pose
 
         moves.append(new_pose)
 
@@ -1109,7 +1110,7 @@ def main():
     robot_pos = None
     goal = None
 
-    frame_by_frame = False
+    frame_by_frame = True
     use_ga = False
     use_astar = True
     use_astar_stats = False
@@ -1130,7 +1131,7 @@ def main():
 
     if lidar_grid:
         robot_pos = (5, 10)
-        goal = (5, 40)
+        goal = (20, 20)
 
         grid_aux = [
             [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
@@ -1228,8 +1229,8 @@ def main():
     ga_list, ga_nb_of_turns, ga_smoothness, ga_t_exec, ga_cost, ga_fails = [], [], [], [], [], 0
     astar_nb_list, astar_nb_of_turns, astar_smoothness, astar_nb_t_exec, astar_nb_cost, astar_nb_fails = [], [], [], [], [], 0
 
-    max_time = s2ns(2)
-    lim_iter = 500_000_000
+    max_time = s2ns(4)
+    lim_iter = 500_000
 
     if use_astar:
         astar_sol = astar(grid, robot_pos, goal)
