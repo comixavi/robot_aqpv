@@ -968,8 +968,9 @@ def calculate_smoothness(path):
     for i in range(1, len(path) - 1):
         dx1 = path[i][0] - path[i - 1][0]
         dy1 = path[i][1] - path[i - 1][1]
+
         dx2 = path[i + 1][0] - path[i][0]
-        dy2 = path[i + 1][1] - path[i + 1][1]
+        dy2 = path[i + 1][1] - path[i][1]
 
         dot_product = dx1 * dx2 + dy1 * dy2
         magnitude1 = np.sqrt(dx1 ** 2 + dy1 ** 2)
@@ -1103,16 +1104,16 @@ def main():
         return sec*1_000_000_000
 
     simple_grid = False
-    random_grid = False
-    lidar_grid = True
+    random_grid = True
+    lidar_grid = False
     grid = None
 
     robot_pos = None
     goal = None
 
-    frame_by_frame = True
+    frame_by_frame = False
     use_ga = False
-    use_astar = True
+    use_astar = False
     use_astar_stats = False
 
     if simple_grid:
