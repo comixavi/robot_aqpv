@@ -53,6 +53,7 @@ def select_parents(population, fitness_scores):
     selected_indices = np.random.choice(indices, size=2, replace=False, p=probabilities)
     parent1 = population[selected_indices[0]]
     parent2 = population[selected_indices[1]]
+
     return parent1, parent2
 
 
@@ -83,13 +84,10 @@ def genetic_algorithm(population_size, move_length, generations, mutation_rate, 
         states = []
         new_population = []
 
-        # with multiprocessing.Pool() as pool:
-        #     fitness_scores = pool.starmap(parallel_fitness_evaluation, [(individual, initial_grid) for individual in population])
         for individual in population:
             res = parallel_fitness_evaluation(individual, initial_grid)
             fitness_scores.append(res[1])
             states.append(res[0])
-        # fitness_scores = [parallel_fitness_evaluation(individual, initial_grid) for individual in population]
 
         max_fitness_index = np.argmax(fitness_scores)
         if fitness_scores[max_fitness_index] > best_fitness:
