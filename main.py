@@ -11,6 +11,7 @@ from sklearn.cluster import DBSCAN
 from mapstate_ import MapState
 from astar_ import astar
 from rrt_ import rrt, rrt_connect, rrt_star, rrt_div
+from rrt_ import plot_comparison_individual, plot_comparison
 from util_ import bresenham_line
 
 
@@ -263,7 +264,6 @@ def plot_complete_scan(path_scan1, path_scan2):
     robot_length = 0.705
     robot_width = 0.576
 
-    Ts = (float(get_item('%time', data_lidar1[2])) - float(get_item('%time', data_lidar1[1]))) / 1_000_000_000
     robot = Robot(corner1=(-robot_length / 2, -robot_width / 2), corner2=(robot_length / 2, -robot_width / 2),
                   corner3=(robot_length / 2, robot_width / 2), corner4=(-robot_length / 2, robot_width / 2),
                   x=0, y=0, angle=0, diag=0.4301162633521313, x_disc=0, y_disc=0)
@@ -273,7 +273,12 @@ def plot_complete_scan(path_scan1, path_scan2):
     y_min = 0
     y_max = 0
 
-    for i in range(1, len(data_lidar1)):
+    tests = 100
+    nb_of_tests = min(len(data_lidar1), tests)
+
+    for i in range(1, nb_of_tests+1):
+        Ts = (float(get_item('%time', data_lidar1[i+1])) - float(get_item('%time', data_lidar1[i]))) / 1_000_000_000
+
         dists_lidar1 = [float(r) for r in
                         data_lidar1[i][:-1].split(',')[start_ranges_offset:start_ranges_offset + nbOfRanges]]
         dists_lidar2 = [float(r) for r in
@@ -413,7 +418,7 @@ def plot_complete_scan(path_scan1, path_scan2):
             y_max = max([y_max, max(filter_arr(y_lidar))])
 
         if not continuous_time:
-            max_time = 1 * 1_000_000_000
+            max_time = Ts * 1_000_000_000
             lim_iter = 100_000_000
 
             robot_point, map_matrix = populate_map(lidar_x_data=x_lidar, lidar_y_data=y_lidar, robot=robot)

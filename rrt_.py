@@ -376,6 +376,10 @@ def rrt_connect(grid, start, goal, lim=1_000, max_t=10):
 
     counter = 0
     start_time = time.time_ns()
+    stable_tree = None
+
+    threshold_conn = 5
+
     # print(len(grid), len(grid[0]))
     # print("Start: ", start)
     # print("Goal: ", goal)
@@ -384,6 +388,9 @@ def rrt_connect(grid, start, goal, lim=1_000, max_t=10):
         counter += 1
 
         for tree in trees:
+            if stable_tree:
+                tree = stable_tree
+
             random_node = random_pos(len(grid), len(grid[0]))
             # print("Punctul random: ", random_node)
 
@@ -420,6 +427,9 @@ def rrt_connect(grid, start, goal, lim=1_000, max_t=10):
 
             other_tree = tr2 if tree is tr1 else tr1
             dist, other_nearest, path = nearest_node(other_tree, new_node.x, new_node.y)
+
+            if not stable_tree and dist < threshold_conn:
+                stable_tree = tree
 
             break_key = False
             for point in path:
@@ -608,8 +618,13 @@ def rrt_div(grid, start, goal_rrt_div, lim=1_000_000, max_t=10_000_000_000):
     moves = [current_pos]
     goal_rrt_div = goal_rrt_div[::-1]
 
+    debounce = True
+    debounce_random_pose = True
+
+    previous_positions = []
+
     start_time = time.time_ns()
-    dst = 10
+    dst = 5
     while counter < lim and time.time_ns() - start_time < max_t:
         min_cost = float('inf')
         new_pose = None
@@ -628,6 +643,15 @@ def rrt_div(grid, start, goal_rrt_div, lim=1_000_000, max_t=10_000_000_000):
 
         if new_pose is None:
             continue
+
+        if debounce:
+            if previous_positions.count((new_pose.x, new_pose.y)) > 3:
+                dst += 5
+                previous_positions = []
+                if debounce_random_pose:
+                    current_pos = random.choice(moves)
+            else:
+                previous_positions.append((new_pose.x, new_pose.y))
 
         dist, nearest_nd, points = nearest_node(moves, new_pose.x, new_pose.y)
 
@@ -786,27 +810,88 @@ def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
     return None
 
 
-def generate_grid_with_obstacles(num_obstacles):
-    grid = np.full((20, 20), MapState.FREE.value)
+def generate_grid_with_plus_obstacles(num_obstacles, grid_size=20, max_obstacle_length=10, min_obstacle_length=2):
+    grid = np.full((grid_size, grid_size), MapState.FREE.value)
+
+    def can_place_line_obstacle(x, y, length, horizontal=True):
+        if horizontal:
+            if y + length >= grid_size:
+                return False
+            for i_local in range(length):
+                if grid[x, y + i_local] != MapState.FREE.value:
+                    return False
+        else:
+            if x + length >= grid_size:
+                return False
+            for i_local in range(length):
+                if grid[x + i_local, y] != MapState.FREE.value:
+                    return False
+        return True
+
+    def can_place_plus_obstacle(x, y, length):
+        if x + length >= grid_size or x - length < 0 or y + length >= grid_size or y - length < 0:
+            return False
+
+        for offset in range(-length, length + 1):
+            if grid[x + offset][y] != MapState.FREE.value or grid[x][y + offset] != MapState.FREE.value:
+                return False
+
+        return True
+
+    for _ in range(num_obstacles):
+        placed = False
+        attempts = 0
+        while not placed and attempts < 100:
+            attempts += 1
+            x = random.randint(0, grid_size - 1)
+            y = random.randint(0, grid_size - 1)
+            length = random.randint(min_obstacle_length, max_obstacle_length)
+
+            obstacle_type = random.choice(['+', 'line'])
+            if obstacle_type == '+':
+                if can_place_plus_obstacle(x, y, length):
+                    for delta in range(-length, length + 1):
+                        grid[x + delta][y] = MapState.OBSTACLE.value
+                        grid[x][y + delta] = MapState.OBSTACLE.value
+                    placed = True
+            else:
+                horizontal = random.choice([True, False])
+                if can_place_line_obstacle(x, y, length, horizontal):
+                    if horizontal:
+                        for i in range(length):
+                            grid[x, y + i] = MapState.OBSTACLE.value
+                    else:
+                        for i in range(length):
+                            grid[x + i, y] = MapState.OBSTACLE.value
+                    placed = True
+
+    return grid
+
+
+def generate_grid_with_obstacles(num_obstacles, grid_size=20, max_obstacle_length=10, min_obstacle_length=2):
+    grid = np.full((grid_size, grid_size), MapState.FREE.value)
 
     def can_place_obstacle():
-        if y + length > 20:
+        if y + length > grid_size:
             return False
+
         for i_local in range(length):
             if grid[x, y + i_local] != MapState.FREE.value:
                 return False
+
             if x > 0 and grid[x - 1, y + i_local] == MapState.OBSTACLE.value:
                 return False
-            if x < 19 and grid[x + 1, y + i_local] == MapState.OBSTACLE.value:
+
+            if x < grid_size - 1 and grid[x + 1, y + i_local] == MapState.OBSTACLE.value:
                 return False
         return True
 
     for _ in range(num_obstacles):
         placed = False
         while not placed:
-            x = random.randint(0, 19)
-            y = random.randint(0, 19)
-            length = random.randint(2, 10)
+            x = random.randint(0, grid_size - 1)
+            y = random.randint(0, grid_size - 1)
+            length = random.randint(min_obstacle_length, max_obstacle_length)
 
             if can_place_obstacle():
                 for i in range(length):
@@ -849,7 +934,7 @@ def plot_blank_grid(grid, title):
 
 def plot_grid(grid, path, text):
     colors = ['blue', 'white', 'black', (0.6, 0.6, 0.6), 'green']
-    Ts = 1/144
+    Ts = 1 / 144
     map_cmap = ListedColormap(colors, name='color_map')
     bounds = [i + 1 for i in range(len(colors) + 1)]
     map_norm = BoundaryNorm(bounds, len(bounds) - 1)
@@ -1102,11 +1187,12 @@ def plot_deviations(methods, data, criteria, mean_values):
 
 def main():
     def s2ns(sec):
-        return sec*1_000_000_000
+        return sec * 1_000_000_000
 
     simple_grid = False
-    random_grid = False
-    lidar_grid = True
+    random_grid = True
+    plus_grid = True
+    lidar_grid = False
     grid = None
 
     robot_pos = None
@@ -1213,33 +1299,45 @@ def main():
         grid[goal] = MapState.GOAL.value
 
     if random_grid:
-        grid = generate_grid_with_obstacles(5)
+        grid_random_size = 50
+        if plus_grid:
+            grid = generate_grid_with_plus_obstacles(num_obstacles=20, grid_size=grid_random_size,
+                                                     max_obstacle_length=5, min_obstacle_length=2)
+        else:
+            grid = generate_grid_with_obstacles(5, grid_size=grid_random_size)
+
+        print(len(grid))
+        print(grid_random_size)
+        print()
+
         robot_pos = (0, 0)
-        goal = (19, 19)
+        goal = (grid_random_size - 1, grid_random_size - 1)
 
         grid[robot_pos] = MapState.ROBOT.value
         grid[goal] = MapState.GOAL.value
 
+        # plot_blank_grid(grid, "Enhanced Complexity in Simulated Environments")
+
     nb_of_test = 100
 
-    rrt_nb_list, rrt_nb_of_turns, rrt_smoothness, rrt_nb_t_exec, rrt_nb_cost, rrt_nb_fails =\
+    rrt_nb_list, rrt_nb_of_turns, rrt_smoothness, rrt_nb_t_exec, rrt_nb_cost, rrt_nb_fails = \
         [], [], [], [], [], 0
-    rrt_fast_list, rrt_fast_nb_of_turns, rrt_fast_smoothness, rrt_fast_t_exec, rrt_fast_cost, rrt_fast_fails =\
+    rrt_fast_list, rrt_fast_nb_of_turns, rrt_fast_smoothness, rrt_fast_t_exec, rrt_fast_cost, rrt_fast_fails = \
         [], [], [], [], [], 0
-    rrt_div_list, rrt_div_nb_of_turns, rrt_div_smoothness, rrt_div_t_exec, rrt_div_cost, rrt_div_fails =\
+    rrt_div_list, rrt_div_nb_of_turns, rrt_div_smoothness, rrt_div_t_exec, rrt_div_cost, rrt_div_fails = \
         [], [], [], [], [], 0
-    rrt_con_list, rrt_con_nb_of_turns, rrt_con_smoothness, rrt_con_t_exec, rrt_con_cost, rrt_con_fails =\
+    rrt_con_list, rrt_con_nb_of_turns, rrt_con_smoothness, rrt_con_t_exec, rrt_con_cost, rrt_con_fails = \
         [], [], [], [], [], 0
-    rrt_star_list, rrt_star_nb_of_turns, rrt_star_smoothness, rrt_star_t_exec, rrt_star_cost, rrt_star_fails =\
-        [], [], [], [], [], 0
-
-    ga_list, ga_nb_of_turns, ga_smoothness, ga_t_exec, ga_cost, ga_fails =\
-        [], [], [], [], [], 0
-    astar_nb_list, astar_nb_of_turns, astar_smoothness, astar_nb_t_exec, astar_nb_cost, astar_nb_fails =\
+    rrt_star_list, rrt_star_nb_of_turns, rrt_star_smoothness, rrt_star_t_exec, rrt_star_cost, rrt_star_fails = \
         [], [], [], [], [], 0
 
-    max_time = s2ns(1)  # 0.5
-    lim_iter = 1_000_000
+    ga_list, ga_nb_of_turns, ga_smoothness, ga_t_exec, ga_cost, ga_fails = \
+        [], [], [], [], [], 0
+    astar_nb_list, astar_nb_of_turns, astar_smoothness, astar_nb_t_exec, astar_nb_cost, astar_nb_fails = \
+        [], [], [], [], [], 0
+
+    max_time = s2ns(0.5)  # 0.5
+    lim_iter = 10_000_000
 
     if use_astar:
         astar_sol = astar(grid, robot_pos, goal)
@@ -1268,9 +1366,14 @@ def main():
         print(i / nb_of_test)
 
         if random_grid:
-            grid = generate_grid_with_obstacles(5)
+            grid_size = 50
+            if plus_grid:
+                grid = generate_grid_with_plus_obstacles(num_obstacles=20, grid_size=grid_size,
+                                                         max_obstacle_length=5, min_obstacle_length=2)
+            else:
+                grid = generate_grid_with_obstacles(20, grid_size, max_obstacle_length=25)
             robot_pos = (0, 0)
-            goal = (19, 19)
+            goal = (grid_size - 1, grid_size - 1)
 
             grid[robot_pos] = MapState.ROBOT.value
             grid[goal] = MapState.GOAL.value
@@ -1556,6 +1659,7 @@ def main():
     print_statistics(rrt_div_smoothness, 'RRT Div')
     print_statistics(rrt_fast_smoothness, 'RRT Fast')
     print_statistics(rrt_star_smoothness, 'RRT Star')
+
     if use_ga:
         print_statistics(ga_smoothness, 'GA')
 
