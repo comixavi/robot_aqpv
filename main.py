@@ -30,7 +30,7 @@ def populate_map(lidar_x_data, lidar_y_data, robot, goal, resolution=0.25):
         elif num > 0:
             return int(num) + 1
         else:
-            return 0  # Handle case when num is 0
+            return 0
 
     def x_discrete(el):
         return int((el - x_min) / resolution)
@@ -168,8 +168,8 @@ def rotation_matrix(angle, x_offset, y_offset):
     sin_theta = np.sin(angle)
 
     rotation_matrix_lines = np.array([[cos_theta, -sin_theta, x_offset],
-                                      [sin_theta, cos_theta, y_offset],
-                                      [0, 0, 1]])
+                                      [sin_theta, cos_theta,  y_offset],
+                                      [0,         0,          1]])
 
     return rotation_matrix_lines
 
@@ -380,7 +380,7 @@ def plot_complete_scan(path_scan1, path_scan2):
 
             legend_handles = [plt.Rectangle((0, 0), 1, 1, color='white') for _ in range(2)]
             legend_labels = [f"Epsilon: {epsilon}", f"Minimum samples: {min_samples}"]
-            plt.legend(legend_handles, legend_labels, loc='upper right', fontsize="200" )
+            plt.legend(legend_handles, legend_labels, loc='upper right', fontsize="200")
 
             plt.tight_layout()
 
@@ -436,7 +436,8 @@ def plot_complete_scan(path_scan1, path_scan2):
                     legend_labels.append("A* Path")
                     # noinspection PyTypeChecker
                     legend_handles.append(
-                        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='lime', markersize=10, label='A* Path'))
+                        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='lime',
+                                   markersize=10, label='A* Path'))
                     print(f"A* Solution found with {nb_of_nodes} searches")
                 else:
                     print(f"A* Solution isn't found")
@@ -479,7 +480,8 @@ def plot_complete_scan(path_scan1, path_scan2):
                 if path_rrt_star is not None:
                     nb_of_nodes, path_rrt_star = path_rrt_star
                     path_rrt_star = np.array(path_rrt_star)
-                    plt.plot(path_rrt_star[:, 1], path_rrt_star[:, 0], color=(10 / 255, 155 / 255, 255 // 255), marker='o')
+                    plt.plot(path_rrt_star[:, 1], path_rrt_star[:, 0],
+                             color=(10 / 255, 155 / 255, 255 // 255), marker='o')
                     legend_labels.append("RRT* Path")
                     # noinspection PyTypeChecker
                     legend_handles.append(

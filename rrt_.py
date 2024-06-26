@@ -1,6 +1,5 @@
 import random
 import time
-from multiprocessing import freeze_support
 
 import pandas as pd
 import numpy as np
@@ -309,7 +308,8 @@ def rrt(grid, start, goal, lim=1_000, max_t=10):
                     current_node = current_node.parent
 
                 # while current_node.parent is not None:
-                #     points_in = bresenham_line(current_node.x, current_node.y, current_node.parent.x, current_node.parent.y)
+                #     points_in = bresenham_line(current_node.x, current_node.y,
+                #     current_node.parent.x, current_node.parent.y)
                 #
                 #     for point_in in points_in[1:]:
                 #         path.append((point_in[1], point_in[0]))
@@ -385,7 +385,7 @@ def rrt_connect(grid, start, goal, lim=1_000, max_t=10):
 
         for tree in trees:
             random_node = random_pos(len(grid), len(grid[0]))
-            #print("Punctul random: ", random_node)
+            # print("Punctul random: ", random_node)
 
             if obstacle_collide(grid, random_node):
                 continue
@@ -609,7 +609,7 @@ def rrt_div(grid, start, goal, lim=1_000, max_t=10):
     goal = goal[::-1]
 
     start_time = time.time_ns()
-    dst = 5
+    dst = 10
     while counter < lim and time.time_ns() - start_time < max_t:
         min_cost = float('inf')
         new_pose = None
@@ -792,12 +792,12 @@ def generate_grid_with_obstacles(num_obstacles):
     def can_place_obstacle():
         if y + length > 20:
             return False
-        for i in range(length):
-            if grid[x, y + i] != MapState.FREE.value:
+        for i_local in range(length):
+            if grid[x, y + i_local] != MapState.FREE.value:
                 return False
-            if x > 0 and grid[x - 1, y + i] == MapState.OBSTACLE.value:
+            if x > 0 and grid[x - 1, y + i_local] == MapState.OBSTACLE.value:
                 return False
-            if x < 19 and grid[x + 1, y + i] == MapState.OBSTACLE.value:
+            if x < 19 and grid[x + 1, y + i_local] == MapState.OBSTACLE.value:
                 return False
         return True
 
@@ -829,8 +829,8 @@ def plot_blank_grid(grid, title):
 
     plt.imshow(grid, cmap=map_cmap, norm=map_norm, interpolation='none')
     legend_labels = [state.name for state in MapState]
-    legend_handles = [plt.Rectangle((0, 0), 1, 1,
-                                    color=map_cmap(map_norm(i + 1))) for i in range(len(legend_labels))]
+    # legend_handles = [plt.Rectangle((0, 0), 1, 1,
+    #                                 color=map_cmap(map_norm(i + 1))) for i in range(len(legend_labels))]
 
     plt.title(f'Robot Environment - {title}')
     plt.xlabel('X')
@@ -925,7 +925,7 @@ def read_from_excel(filename):
 
     results = {}
     current_method = None
-    category = None
+    # category = None
 
     for index, row in df.iterrows():
         if pd.isna(row[0]):
@@ -1079,10 +1079,10 @@ def plot_deviations(methods, data, criteria, mean_values):
     index = np.arange(num_methods)
 
     for i, criterion in enumerate(criteria):
-        if mean_values[i] != 0:  # Avoid division by zero
+        if mean_values[i] != 0:
             deviations = [abs(data[j][i] - mean_values[i]) / mean_values[i] for j in range(num_methods)]
         else:
-            deviations = [0] * num_methods  # Set deviations to 0 where mean is 0 to handle division by zero
+            deviations = [0] * num_methods
         for ind, dev in enumerate(deviations):
             if dev > 1:
                 deviations[ind] = 1
@@ -1093,6 +1093,7 @@ def plot_deviations(methods, data, criteria, mean_values):
     ax.set_title('Standardized Deviations from Mean by Various Criteria')
     ax.set_xticks(index + bar_width * (num_criteria - 1) / 2)
     ax.set_xticklabels(methods, rotation=45, ha='right')
+    ax.xaxis.set_tick_params(labelsize=12)
     ax.legend()
 
     plt.tight_layout()
@@ -1104,8 +1105,8 @@ def main():
         return sec*1_000_000_000
 
     simple_grid = False
-    random_grid = True
-    lidar_grid = False
+    random_grid = False
+    lidar_grid = True
     grid = None
 
     robot_pos = None
@@ -1219,19 +1220,26 @@ def main():
         grid[robot_pos] = MapState.ROBOT.value
         grid[goal] = MapState.GOAL.value
 
-    nb_of_test = 10
+    nb_of_test = 100
 
-    rrt_nb_list, rrt_nb_of_turns, rrt_smoothness, rrt_nb_t_exec, rrt_nb_cost, rrt_nb_fails = [], [], [], [], [], 0
-    rrt_fast_list, rrt_fast_nb_of_turns, rrt_fast_smoothness, rrt_fast_t_exec, rrt_fast_cost, rrt_fast_fails = [], [], [], [], [], 0
-    rrt_div_list, rrt_div_nb_of_turns, rrt_div_smoothness, rrt_div_t_exec, rrt_div_cost, rrt_div_fails = [], [], [], [], [], 0
-    rrt_con_list, rrt_con_nb_of_turns, rrt_con_smoothness, rrt_con_t_exec, rrt_con_cost, rrt_con_fails = [], [], [], [], [], 0
-    rrt_star_list, rrt_star_nb_of_turns, rrt_star_smoothness, rrt_star_t_exec, rrt_star_cost, rrt_star_fails = [], [], [], [], [], 0
+    rrt_nb_list, rrt_nb_of_turns, rrt_smoothness, rrt_nb_t_exec, rrt_nb_cost, rrt_nb_fails =\
+        [], [], [], [], [], 0
+    rrt_fast_list, rrt_fast_nb_of_turns, rrt_fast_smoothness, rrt_fast_t_exec, rrt_fast_cost, rrt_fast_fails =\
+        [], [], [], [], [], 0
+    rrt_div_list, rrt_div_nb_of_turns, rrt_div_smoothness, rrt_div_t_exec, rrt_div_cost, rrt_div_fails =\
+        [], [], [], [], [], 0
+    rrt_con_list, rrt_con_nb_of_turns, rrt_con_smoothness, rrt_con_t_exec, rrt_con_cost, rrt_con_fails =\
+        [], [], [], [], [], 0
+    rrt_star_list, rrt_star_nb_of_turns, rrt_star_smoothness, rrt_star_t_exec, rrt_star_cost, rrt_star_fails =\
+        [], [], [], [], [], 0
 
-    ga_list, ga_nb_of_turns, ga_smoothness, ga_t_exec, ga_cost, ga_fails = [], [], [], [], [], 0
-    astar_nb_list, astar_nb_of_turns, astar_smoothness, astar_nb_t_exec, astar_nb_cost, astar_nb_fails = [], [], [], [], [], 0
+    ga_list, ga_nb_of_turns, ga_smoothness, ga_t_exec, ga_cost, ga_fails =\
+        [], [], [], [], [], 0
+    astar_nb_list, astar_nb_of_turns, astar_smoothness, astar_nb_t_exec, astar_nb_cost, astar_nb_fails =\
+        [], [], [], [], [], 0
 
-    max_time = s2ns(4)
-    lim_iter = 500_000
+    max_time = s2ns(1)  # 0.5
+    lim_iter = 1_000_000
 
     if use_astar:
         astar_sol = astar(grid, robot_pos, goal)
@@ -1342,6 +1350,7 @@ def main():
                     plot_grid(grid=grid, path=rrt_div_sol_aux, text='RRT div')
             else:
                 plot_grid(grid=grid, path=rrt_div_sol, text='RRT div')
+
             rrt_div_list.append(len(rrt_div_sol[1]))
             rrt_div_t_exec.append(rrt_div_sol[2] / 1_000_000)
             rrt_div_cost.append(rrt_div_sol[3])
@@ -1472,7 +1481,7 @@ def main():
         energy_costs.append(np.nanmean(astar_nb_cost))
         number_of_fails.append(astar_nb_fails / nb_of_test * 100)
 
-    if use_ga:
+    if use_ga and simple_grid:
         methods.append('GA')
         path_lengths.append(np.nanmean(ga_list))
         number_of_turns.append(np.nanmean(ga_nb_of_turns))
