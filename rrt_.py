@@ -600,13 +600,13 @@ def chain_rrt_div(new_node, nearest_nd):
     return new_node
 
 
-def rrt_div(grid, start, goal, lim=1_000, max_t=10):
+def rrt_div(grid, start, goal_rrt_div, lim=1_000_000, max_t=10_000_000_000):
     rows, cols = grid.shape
     counter = 0
     current_pos = NodeRRTStar(*start[::-1])
     checked_combos = dict()
     moves = [current_pos]
-    goal = goal[::-1]
+    goal_rrt_div = goal_rrt_div[::-1]
 
     start_time = time.time_ns()
     dst = 10
@@ -621,7 +621,7 @@ def rrt_div(grid, start, goal, lim=1_000, max_t=10):
             if obstacle_collide_bresenham_line(grid, *point, current_pos.x, current_pos.y, checked_combos):
                 continue
 
-            local_cost = distance(point, goal)
+            local_cost = distance(point, goal_rrt_div)
             if local_cost < min_cost:
                 min_cost = local_cost
                 new_pose = NodeRRTStar(point[0], point[1])
@@ -648,7 +648,7 @@ def rrt_div(grid, start, goal, lim=1_000, max_t=10):
 
         counter += 1
 
-        if goal[0] == new_pose.x and goal[1] == new_pose.y:
+        if goal_rrt_div[0] == new_pose.x and goal_rrt_div[1] == new_pose.y:
             path = []
             current_node = new_pose
 
@@ -1275,7 +1275,7 @@ def main():
             grid[robot_pos] = MapState.ROBOT.value
             grid[goal] = MapState.GOAL.value
 
-        if use_astar and random_grid:
+        if use_astar and (random_grid or simple_grid):
             astar_sol = astar(grid, robot_pos, goal)
 
             if astar_sol is not None:

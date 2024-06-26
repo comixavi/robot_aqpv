@@ -1,16 +1,16 @@
-import math
+import random
 from collections import namedtuple
+from math import cos, sin, pi, floor, isinf
 
-from matplotlib.colors import ListedColormap, BoundaryNorm
-import matplotlib.pyplot as plt
 import numpy as np
-from math import sin, cos, pi
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap, BoundaryNorm
 
 from sklearn.cluster import DBSCAN
 
+from mapstate_ import MapState
 from astar_ import astar
 from rrt_ import rrt, rrt_connect, rrt_star, rrt_div
-from mapstate_ import MapState
 from util_ import bresenham_line
 
 
@@ -23,7 +23,11 @@ def cache_fct(minimum, step, maximum, fct):
     return dictFct
 
 
-def populate_map(lidar_x_data, lidar_y_data, robot, goal, resolution=0.25):
+def place_goal(extended_matrix, goal):
+    extended_matrix[*goal] = MapState.GOAL.value
+
+
+def populate_map(lidar_x_data, lidar_y_data, robot, goal=None, resolution=0.25):
     def closest_integer(num):
         if num < 0:
             return int(num) - 1
@@ -47,13 +51,15 @@ def populate_map(lidar_x_data, lidar_y_data, robot, goal, resolution=0.25):
     non_inf_numbers = [num for num in lidar_y_data if not np.isinf(num) and not np.isnan(num)]
     y_max = closest_integer(max(non_inf_numbers))
 
-    shape_col = (math.floor(int(y_max - y_min) / resolution)) + 1
-    shape_lines = (math.floor(int(x_max - x_min) / resolution)) + 1
+    shape_col = (floor(int(y_max - y_min) / resolution)) + 1
+    shape_lines = (floor(int(x_max - x_min) / resolution)) + 1
     matrix = np.full((shape_lines, shape_col), MapState.FREE.value, dtype=int)
     rows, cols = matrix.shape
 
+    debug_print = False
+
     for i, _ in enumerate(lidar_x_data):
-        if not math.isinf(lidar_x_data[i]) and not math.isinf(lidar_y_data[i]):
+        if not isinf(lidar_x_data[i]) and not isinf(lidar_y_data[i]):
             lidar_x = int((lidar_x_data[i] - x_min) / resolution)
             lidar_y = int((lidar_y_data[i] - y_min) / resolution)
             if shape_lines > lidar_x and shape_col > lidar_y:
@@ -113,13 +119,15 @@ def populate_map(lidar_x_data, lidar_y_data, robot, goal, resolution=0.25):
                             extended_matrix[new_row, new_col] = MapState.EXTENDED_OBSTACLE.value
 
     # Region: goal
-    extended_matrix[goal[1], goal[0]] = MapState.GOAL.value
+    if goal:
+        extended_matrix[goal[0], goal[1]] = MapState.GOAL.value
 
     # matrix = extended_matrix.copy()
-    for line in extended_matrix:
-        print(len(line))
+    if debug_print:
+        for line in extended_matrix:
+            print(len(line))
 
-    input()
+    # input()
     return point, extended_matrix
 
 
@@ -405,13 +413,22 @@ def plot_complete_scan(path_scan1, path_scan2):
             y_max = max([y_max, max(filter_arr(y_lidar))])
 
         if not continuous_time:
-            goal = [20, 5]
-            robot_point, map_matrix = populate_map(lidar_x_data=x_lidar, lidar_y_data=y_lidar, robot=robot, goal=goal)
+            max_time = 1 * 1_000_000_000
+            lim_iter = 100_000_000
+
+            robot_point, map_matrix = populate_map(lidar_x_data=x_lidar, lidar_y_data=y_lidar, robot=robot)
             y_loc, x_loc = map_matrix.shape
             x_min = 0
             y_min = 0
             x_max = max(x_max, x_loc)
             y_max = max(y_max, y_loc)
+            rows = len(map_matrix)
+            cols = len(map_matrix[0])
+
+            goal = [random.randint(0, rows - 1), random.randint(0, cols - 1)]
+            while map_matrix[goal[0]][goal[1]] != MapState.FREE.value:
+                goal = [random.randint(0, rows - 1), random.randint(0, cols - 1)]
+            place_goal(extended_matrix=map_matrix, goal=goal)
 
             plt.imshow(map_matrix, cmap=map_cmap, norm=map_norm, interpolation='none')
             legend_labels = [state.name for state in MapState]
@@ -424,12 +441,12 @@ def plot_complete_scan(path_scan1, path_scan2):
             plt.xlim(x_min, x_max)
             plt.ylim(y_min, y_max)
 
-            test_astar = False
+            test_astar = True
             if test_astar:
-                path_astar = astar(map_matrix, (robot_point[0], robot_point[1]), [goal[1], goal[0]])
-                # noinspection PyTypeChecker
+                path_astar = astar(map_matrix, (robot_point[0], robot_point[1]),
+                                   [goal[1], goal[0]], lim_iter, max_time)
                 if path_astar is not None:
-                    nb_of_nodes, path_astar = path_astar
+                    nb_of_nodes, path_astar, dt, dist = path_astar
 
                     path_astar = np.array(path_astar)
                     plt.plot(path_astar[:, 1], path_astar[:, 0], color='lime', marker='o')
@@ -438,15 +455,16 @@ def plot_complete_scan(path_scan1, path_scan2):
                     legend_handles.append(
                         plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='lime',
                                    markersize=10, label='A* Path'))
-                    print(f"A* Solution found with {nb_of_nodes} searches")
+                    print(f"A* Solution Solution found with {nb_of_nodes} searches in {dt / 1e9:.3f} seconds")
                 else:
                     print(f"A* Solution isn't found")
 
-            test_rrt = False
+            test_rrt = True
             if test_rrt:
-                path_rrt = rrt(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
+                path_rrt = rrt(map_matrix, (robot_point[0], robot_point[1]),
+                               [goal[0], goal[1]], lim_iter, max_time)
                 if path_rrt is not None:
-                    nb_of_nodes, path_rrt = path_rrt
+                    nb_of_nodes, path_rrt, dt, dist = path_rrt
                     path_rrt = np.array(path_rrt)
                     plt.plot(path_rrt[:, 1], path_rrt[:, 0], color='magenta', marker='o')
                     legend_labels.append("RRT Path")
@@ -454,31 +472,34 @@ def plot_complete_scan(path_scan1, path_scan2):
                     legend_handles.append(
                         plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='magenta', markersize=10,
                                    label='RRT Path'))
-                    print(f"RRT Solution found with {nb_of_nodes} searches")
+                    print(f"RRT Solution found with {nb_of_nodes} searches in {dt / 1e9:.3f} seconds")
                 else:
                     print(f"RRT Solution isn't found")
 
-            test_rrt_connect = False
+            test_rrt_connect = True
             if test_rrt_connect:
-                path_rrt_connect = rrt_connect(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
+                path_rrt_connect = rrt_connect(map_matrix, (robot_point[0], robot_point[1]),
+                               [goal[0], goal[1]], lim_iter, max_time)
                 if path_rrt_connect is not None:
-                    nb_of_nodes, path_rrt_connect = path_rrt_connect
+                    nb_of_nodes, path_rrt_connect, dt, dist = path_rrt_connect
                     path_rrt_connect = np.array(path_rrt_connect)
-                    plt.plot(path_rrt_connect[:, 1], path_rrt_connect[:, 0], color='magenta', marker='o')
-                    legend_labels.append("RRT Path")
+                    plt.plot(path_rrt_connect[:, 1], path_rrt_connect[:, 0], markerfacecolor=(10 / 255, 155 / 255, 255 / 255),
+                             marker='o')
+                    legend_labels.append("RRT-Con Path")
                     # noinspection PyTypeChecker
                     legend_handles.append(
-                        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='magenta', markersize=10,
-                                   label='RRT Path'))
-                    print(f"RRT-Connect Solution found with {nb_of_nodes} searches")
+                        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=(10 / 255, 155 / 255, 255 / 255),
+                                   markersize=10, label='RRT-Con Path'))
+                    print(f"RRT-Connect Solution found with {nb_of_nodes} searches in {dt / 1e9:.3f} seconds")
                 else:
                     print(f"RRT-Connect Solution isn't found")
 
-            test_rrt_star = False
+            test_rrt_star = True
             if test_rrt_star:
-                path_rrt_star = rrt_star(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
+                path_rrt_star = rrt_star(map_matrix, (robot_point[0], robot_point[1]),
+                               [goal[0], goal[1]], lim_iter, max_time)
                 if path_rrt_star is not None:
-                    nb_of_nodes, path_rrt_star = path_rrt_star
+                    nb_of_nodes, path_rrt_star, dt, dist = path_rrt_star
                     path_rrt_star = np.array(path_rrt_star)
                     plt.plot(path_rrt_star[:, 1], path_rrt_star[:, 0],
                              color=(10 / 255, 155 / 255, 255 // 255), marker='o')
@@ -487,27 +508,31 @@ def plot_complete_scan(path_scan1, path_scan2):
                     legend_handles.append(
                         plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=(10 / 255, 155 / 255, 255 / 255),
                                    markersize=10, label='RRT* Path'))
-                    print(f"RRT* Solution found with {nb_of_nodes} searches")
+                    print(f"RRT* Solution Solution found with {nb_of_nodes} searches in {dt / 1e9:.3f} seconds")
                 else:
                     print(f"RRT* Solution isn't found")
 
-            test_rrt_div = False
+            test_rrt_div = True
             if test_rrt_div:
-                path_rrt_div = rrt_div(map_matrix, (robot_point[0], robot_point[1]), [goal[0], goal[1]])
+                path_rrt_div = rrt_div(map_matrix, (robot_point[0], robot_point[1]),
+                                       [goal[0], goal[1]], lim_iter, max_time)
                 if path_rrt_div is not None:
-                    nb_of_nodes, path_rrt_div = path_rrt_div
+                    nb_of_nodes, path_rrt_div, dt, dist = path_rrt_div
                     path_rrt_div = np.array(path_rrt_div)
                     plt.plot(path_rrt_div[:, 1], path_rrt_div[:, 0], color='r', marker='o')
-                    legend_labels.append("A/RRT* Path")
+                    legend_labels.append("RRT-Div Path")
                     # noinspection PyTypeChecker
                     legend_handles.append(
                         plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='r',
                                    markersize=10, label='A/RRT* Path'))
-                    print(f"My A/RRT Solution found with {nb_of_nodes} searches")
+                    print(f"My RRT-Div Solution found with {nb_of_nodes} searches in {dt / 1e9:.3f} seconds")
                 else:
-                    print(f"My A/RRT Solution isn't found")
+                    print(f"My RRT-Div Solution isn't found")
 
             plt.legend(legend_handles, legend_labels, loc='upper right')
+
+        print("")
+        print(Ts)
 
         plt.xlim(x_min, x_max)
         plt.ylim(y_min, y_max)
@@ -605,6 +630,7 @@ def plot_scan(*paths, nbOfRanges=1681):
         plt.draw()
         plt.pause(Ts)
         plt.clf()
+
     # print(get_item('field.range_min', data[1]))
     # print(get_item('field.range_max', data[1]))
 

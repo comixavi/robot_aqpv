@@ -31,43 +31,44 @@ def reconstruct_path(came_from, current):
 
 def astar(grid, start, goal, lim=10_000, max_t=10_000_000):
     rows, cols = len(grid), len(grid[0])
-
     open_set = []
     heapq.heappush(open_set, (0, start))
     came_from = {}
-    last_move = ()
     g_score = {start: 0}
     f_score = {start: heuristic_cost_estimate(start, goal)}
     counter = 0
     start_time = time.time_ns()
+    last_move = None
 
-    while open_set and counter < lim or max_t > time.time_ns() - start_time:
+    while open_set and (counter < lim and (time.time_ns() - start_time) < max_t):
+        if not open_set:
+            return None  # Return None if no path is found and open_set is empty
+
         _, current = heapq.heappop(open_set)
-        possible_moves = [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (-1, 1), (-1, -1), (1, -1)]
 
+        possible_moves = [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (-1, 1), (-1, -1), (1, -1)]
         counter += 1
 
-        if current[0] == goal[0] and current[1] == goal[1]:
+        if current == goal:
             path = reconstruct_path(came_from, current)
-            return counter, path, time.time() - start_time, total_distance(path)
+            return counter, path, (time.time_ns() - start_time) / 1e9, total_distance(path)
 
         for dx, dy in possible_moves:
             neighbor = (current[0] + dx, current[1] + dy)
 
-            if neighbor[0] < 0 or neighbor[0] >= rows or neighbor[1] < 0 or neighbor[1] >= cols:
-                continue
+            if 0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols:  # Check bounds
+                if grid[neighbor[0]][neighbor[1]] in (MapState.OBSTACLE.value, MapState.EXTENDED_OBSTACLE.value):
+                    continue
 
-            if (grid[neighbor[0]][neighbor[1]] == MapState.OBSTACLE.value or
-                    grid[neighbor[0]][neighbor[1]] == MapState.EXTENDED_OBSTACLE.value):
-                continue
+                tentative_g_score = g_score[current] + 1
 
-            tentative_g_score = g_score[current] + 1
+                if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g_score
 
-            if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
-                came_from[neighbor] = current
-                g_score[neighbor] = tentative_g_score
-                off_f = 1 if last_move == (dx, dy) else 1.25
-                last_move = (dx, dy)
-                f_score[neighbor] = tentative_g_score + off_f * heuristic_cost_estimate(neighbor, goal)
-                heapq.heappush(open_set, (f_score[neighbor], neighbor))
+                    off_f = 1 if (dx, dy) == last_move else 1.25
+                    last_move = (dx, dy)
+
+                    f_score[neighbor] = tentative_g_score + off_f * heuristic_cost_estimate(neighbor, goal)
+                    heapq.heappush(open_set, (f_score[neighbor], neighbor))
     return None
