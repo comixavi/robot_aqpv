@@ -42,7 +42,7 @@ def astar(grid, start, goal, lim=10_000, max_t=10_000_000):
 
     while open_set and (counter < lim and (time.time_ns() - start_time) < max_t):
         if not open_set:
-            return None  # Return None if no path is found and open_set is empty
+            return None
 
         _, current = heapq.heappop(open_set)
 
@@ -56,7 +56,7 @@ def astar(grid, start, goal, lim=10_000, max_t=10_000_000):
         for dx, dy in possible_moves:
             neighbor = (current[0] + dx, current[1] + dy)
 
-            if 0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols:  # Check bounds
+            if 0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols:
                 if grid[neighbor[0]][neighbor[1]] in (MapState.OBSTACLE.value, MapState.EXTENDED_OBSTACLE.value):
                     continue
 

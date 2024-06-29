@@ -23,7 +23,7 @@ class GAParameterPredictor(nn.Module):
         super(GAParameterPredictor, self).__init__()
         self.fc1 = nn.Linear(input_dimension, 64)
         self.fc2 = nn.Linear(64, 64)
-        self.output_layer = nn.Linear(64, 4)  # Now outputting 4 values
+        self.output_layer = nn.Linear(64, 4)
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
@@ -48,13 +48,11 @@ def transform_back(scaled_values):
     if scaled_values.numel() != 4:
         raise ValueError("Expected scaled_values tensor with exactly four elements")
 
-    # Define the min and max for each parameter including mutation rate
     min_population_size, max_population_size = 50, 1000
     min_move_length, max_move_length = 10, 200
     min_generations, max_generations = 10, 100
-    min_mutation_rate, max_mutation_rate = 0.01, 0.25  # example ranges for mutation rate
+    min_mutation_rate, max_mutation_rate = 0.01, 0.25
 
-    # Extract scalar values from tensor
     population_size = int(scaled_values[0].item() * (max_population_size - min_population_size) + min_population_size)
     move_length = int(scaled_values[1].item() * (max_move_length - min_move_length) + min_move_length)
     generations = int(scaled_values[2].item() * (max_generations - min_generations) + min_generations)
@@ -64,11 +62,9 @@ def transform_back(scaled_values):
 
 
 def pad_grid(grid, target_dim):
-    """ Pad the grid to the target dimensions with EXTENDED_OBSTACLE. """
     pad_height = target_dim[0] - grid.shape[0]
     pad_width = target_dim[1] - grid.shape[1]
 
-    # Pad bottom and right with extended obstacles if necessary
     padded_grid = np.pad(grid,
                          ((0, pad_height), (0, pad_width)),
                          'constant', constant_values=MapState.EXTENDED_OBSTACLE.value)
@@ -116,7 +112,7 @@ def a_star_search(grid, start, goal):
                     fscore[neighbor] = tentative_g_score + heuristic(neighbor, goal)
                     heappush(oheap, (fscore[neighbor], neighbor))
 
-    return False  # Return False if no path is found
+    return False
 
 
 def find_positions(grid):
@@ -192,11 +188,11 @@ def train_model(model, train_loader, criterion, optimizer, epochs=1):
 
 def print_map(mtx):
     state_symbols = {
-        MapState.ROBOT.value: '🤖',
-        MapState.FREE.value: '⬜',
-        MapState.OBSTACLE.value: '⬛',
-        MapState.EXTENDED_OBSTACLE.value: '⬛',
-        MapState.GOAL.value: '🎯'
+        MapState.ROBOT.value: 'R',
+        MapState.FREE.value: 'F',
+        MapState.OBSTACLE.value: 'O',
+        MapState.EXTENDED_OBSTACLE.value: 'E',
+        MapState.GOAL.value: 'G'
     }
 
     for row in mtx:
@@ -260,46 +256,37 @@ def custom_collate(batch):
 
 
 if __name__ == "__main__":
-    # Generate dataset
     num_samples = 100
     target_dim = (50, 50)
     maps, solutions = create_dataset(num_samples, min_size=5, max_size=10, target_dim=target_dim)
     dataset = GridDataset(maps, solutions)
     train_loader = DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=custom_collate)
 
-    # Initialize the model
     model = GAParameterPredictor(input_dimension=target_dim[0] * target_dim[1])
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.01)
 
-    # Train the model
     train_model(model, train_loader, criterion, optimizer, epochs=5)
 
-    # Example test grid
     test_matrix = def_5x5()
     padded_test_matrix = pad_grid(test_matrix, target_dim)
-    test_input_features = np.array(padded_test_matrix).flatten()  # Flatten the matrix to create a feature vector
+    test_input_features = np.array(padded_test_matrix).flatten()
 
-    # Predict parameters
     predicted_params = predict_parameters(model, test_input_features)
     population_size, move_length, generations, mutation_rate = map(int, predicted_params[:-1])
-    mutation_rate = predicted_params[-1]  # Keep mutation rate as a float
+    mutation_rate = predicted_params[-1]
 
-    # Print predicted parameters
     print("Predicted Parameters:", predicted_params)
 
-    # Run the genetic algorithm using predicted parameters
     best_fitness_, best_moves_, _, _ = genetic_algorithm(population_size=population_size, move_length=move_length,
                                                          generations=generations, mutation_rate=mutation_rate,
                                                          grid=test_matrix, max_time=10_000_000_000_000)
     print("Best moves:", best_moves_)
     print("Best fitness:", best_fitness_)
 
-    # Display the initial and final states of the grid
     print("Initial Grid:")
     print_map(test_matrix)
 
-    # Assuming play_move modifies the grid in-place, let's clone the grid first if needed
     final_grid = np.copy(test_matrix)
     play_move(best_moves_, grid=final_grid, draw=True)
 

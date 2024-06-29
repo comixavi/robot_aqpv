@@ -51,7 +51,7 @@ def train_model(model, train_loader, criterion, optimizer, epochs=5):
 
 
 def test_model(model, test_loader):
-    model.eval()z
+    model.eval()
     correct = 0
     total = 0
     with torch.no_grad():

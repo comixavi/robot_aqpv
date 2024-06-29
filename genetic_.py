@@ -3,7 +3,6 @@ from mapstate_ import MapState
 from random import randint
 
 import time
-# import multiprocessing
 import numpy as np
 
 
@@ -38,13 +37,10 @@ def select_parents(population, fitness_scores):
     total_fitness = sum(fitness_scores)
     probabilities = [score / total_fitness for score in fitness_scores]
 
-    # Check if probabilities are non-negative
     if any(prob < 0 for prob in probabilities):
-        # If any probability is negative, adjust all probabilities to be non-negative
         min_prob = min(probabilities)
         probabilities = [prob - min_prob for prob in probabilities]
 
-    # Normalize probabilities
     total_prob = sum(probabilities)
     if total_prob != 0:
         probabilities = [prob / total_prob for prob in probabilities]
@@ -177,11 +173,11 @@ def play_move(moves, grid, draw=False):
 
 def print_map(mtx):
     state_symbols = {
-        MapState.ROBOT.value: '🤖',
-        MapState.FREE.value: '⬜',
-        MapState.OBSTACLE.value: '⬛',
-        MapState.EXTENDED_OBSTACLE.value: '⬛',
-        MapState.GOAL.value: '🎯'
+        MapState.ROBOT.value: 'R',
+        MapState.FREE.value: 'F',
+        MapState.OBSTACLE.value: 'O',
+        MapState.EXTENDED_OBSTACLE.value: 'E',
+        MapState.GOAL.value: 'G'
     }
 
     for row in mtx:
@@ -194,7 +190,6 @@ def print_map(mtx):
 def def_100x100():
     matrix_100x100 = np.full((100, 100), MapState.FREE.value)
 
-    # Set different MapState values for specific cells
     matrix_100x100[0, 0] = MapState.ROBOT.value
     matrix_100x100[20, 20] = MapState.OBSTACLE.value
     matrix_100x100[30, 40] = MapState.OBSTACLE.value
@@ -202,17 +197,14 @@ def def_100x100():
     matrix_100x100[70, 80] = MapState.OBSTACLE.value
     matrix_100x100[99, 99] = MapState.GOAL.value
 
-    # Add more obstacles
     matrix_100x100[40, 30] = MapState.OBSTACLE.value
     matrix_100x100[60, 50] = MapState.OBSTACLE.value
     matrix_100x100[80, 70] = MapState.OBSTACLE.value
 
-    # Add additional obstacles (2nd time)
     matrix_100x100[10, 70] = MapState.OBSTACLE.value
     matrix_100x100[20, 80] = MapState.OBSTACLE.value
     matrix_100x100[30, 90] = MapState.OBSTACLE.value
 
-    # Add additional obstacles (3rd time)
     matrix_100x100[70, 10] = MapState.OBSTACLE.value
     matrix_100x100[80, 20] = MapState.OBSTACLE.value
     matrix_100x100[90, 30] = MapState.OBSTACLE.value

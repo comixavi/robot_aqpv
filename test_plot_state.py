@@ -22,7 +22,7 @@ def test_mat():
     matrix[2, 1] = State.FREE.value
     matrix[3, 3] = State.OBSTACLE.value
 
-    bounds = [1, 2, 3, 4, 5]  # Add one more value than the number of states
+    bounds = [1, 2, 3, 4, 5]
     norm = BoundaryNorm(bounds, len(bounds) - 1)
 
     colors = ['blue', 'white', 'orange', 'red']
@@ -69,8 +69,10 @@ def plot_std_example():
     for c, p in zip(bins, patches):
         plt.setp(p, 'facecolor', cm(norm(c)))
 
-    plt.axvline(lower_threshold, color='green', linestyle='dashed', linewidth=2, label=f'Lower 3% = {lower_threshold:.2f}')
-    plt.axvline(upper_threshold, color='green', linestyle='dashed', linewidth=2, label=f'Upper 3% = {upper_threshold:.2f}')
+    plt.axvline(lower_threshold, color='green', linestyle='dashed',
+                linewidth=2, label=f'Lower 3% = {lower_threshold:.2f}')
+    plt.axvline(upper_threshold, color='green', linestyle='dashed',
+                linewidth=2, label=f'Upper 3% = {upper_threshold:.2f}')
     plt.axvline(mean, color='orange', linestyle='dashed', linewidth=2, label=f'Mean = {mean:.2f}')
 
     plt.title('Standard Deviation of LiDAR Output Intensity')
@@ -80,4 +82,6 @@ def plot_std_example():
 
     plt.show()
 
-plot_std_example()
+
+if __name__ == '__main__':
+    plot_std_example()

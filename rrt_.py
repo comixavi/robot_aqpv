@@ -1,3 +1,4 @@
+import os
 import random
 import time
 
@@ -11,9 +12,6 @@ from mapstate_ import MapState
 from util_ import bresenham_line
 from astar_ import astar
 from genetic_ import genetic_algorithm
-
-
-# from xlsxwriter import Workbook
 
 
 class NodeRRT:
@@ -58,7 +56,10 @@ class NodeRRTStar:
 def random_pos(rows, cols):
     x = random.randint(0, cols - 1)
     y = random.randint(0, rows - 1)
-    # print(rows, "x", cols, " ", y, "x", x)
+
+    print_debug = False
+    if print_debug:
+        print(rows, "x", cols, " ", y, "x", x)
 
     return x, y
 
@@ -104,7 +105,7 @@ def obstacle_collide_with__checks(grid, current_pos, new_pose, checked_combos=No
     if new_pose.x == current_pos.x and new_pose.y == current_pos.y:
         return True
 
-    if new_pose.x == current_pos.x:  # x1 = x2 -> same j (cols);
+    if new_pose.x == current_pos.x:  # x1 = x2 -> același j (coloane);
         start_i = min(new_pose.y, current_pos.y)
         end_i = max(new_pose.y, current_pos.y)
         j = new_pose.x
@@ -154,9 +155,6 @@ def obstacle_collide_bresenham_line(grid, current_pos_x, current_pos_y, new_pose
     for point in points:
         i = point[0]
         j = point[1]
-
-        # j = min(point[0], len(grid)-1)
-        # i = min(point[1], len(grid[0])-1)
 
         if point[0] > len(grid) - 1 or point[1] > len(grid[0]) - 1:
             return True
@@ -243,15 +241,6 @@ def nearest_node(vertices, new_node_x, new_node_y):
     return min_distance, nearest_nd, min_path
 
 
-# def nearest_nodes(vertices, new_node, max_distance=2):
-#     nearest_nd = []
-#     for vertex in vertices:
-#         dist = distance(vertex, new_node)
-#         if dist < max_distance:
-#             nearest_nd.append(vertex)
-#     return nearest_nd
-
-
 def rrt(grid, start, goal, lim=1_000, max_t=10):
     rows, cols = len(grid), len(grid[0])
     counter = 0
@@ -306,15 +295,6 @@ def rrt(grid, start, goal, lim=1_000, max_t=10):
                 while current_node is not None:
                     path.append((current_node.y, current_node.x))
                     current_node = current_node.parent
-
-                # while current_node.parent is not None:
-                #     points_in = bresenham_line(current_node.x, current_node.y,
-                #     current_node.parent.x, current_node.parent.y)
-                #
-                #     for point_in in points_in[1:]:
-                #         path.append((point_in[1], point_in[0]))
-                #
-                #     current_node = current_node.parent
 
                 path.reverse()
                 final_pt = [start]
@@ -380,9 +360,11 @@ def rrt_connect(grid, start, goal, lim=1_000, max_t=10):
 
     threshold_conn = 5
 
-    # print(len(grid), len(grid[0]))
-    # print("Start: ", start)
-    # print("Goal: ", goal)
+    print_debug = False
+    if print_debug:
+        print(len(grid), len(grid[0]))
+        print("Start: ", start)
+        print("Goal: ", goal)
 
     while counter < lim and time.time_ns() - start_time < max_t:
         counter += 1
@@ -392,31 +374,36 @@ def rrt_connect(grid, start, goal, lim=1_000, max_t=10):
                 tree = stable_tree
 
             random_node = random_pos(len(grid), len(grid[0]))
-            # print("Punctul random: ", random_node)
+
+            if print_debug:
+                print("Punctul random: ", random_node)
 
             if obstacle_collide(grid, random_node):
                 continue
 
             dist, nearest_nd, path = nearest_node(tree, *random_node)
-            # print("Cel mai aproape nod: ", nearest_nd)
-            # print("")
+
+            if print_debug:
+                print("Cel mai aproape nod: ", nearest_nd)
+                print("")
+
             if dist == 0:
                 continue
-
-            # if dist > max_dist:
-            #     path = path[:max_dist + 1]
-            #     random_node = (path[-1][0], path[-1][1])
 
             break_key = False
             for point in path:
                 y = point[0]
                 x = point[1]
 
-                # print(point, end=" ")
+                if print_debug:
+                    print(point, end=" ")
+
                 if grid[y, x] == MapState.OBSTACLE.value or grid[y, x] == MapState.EXTENDED_OBSTACLE.value:
                     break_key = True
                     break
-            # print("\n")
+
+            if print_debug:
+                print("\n")
 
             if break_key:
                 continue
@@ -435,12 +422,16 @@ def rrt_connect(grid, start, goal, lim=1_000, max_t=10):
             for point in path:
                 y = point[0]
                 x = point[1]
-                # print(point, end=" ")
+
+                if print_debug:
+                    print(point, end=" ")
 
                 if grid[y, x] in (MapState.OBSTACLE.value, MapState.EXTENDED_OBSTACLE.value):
                     break_key = True
                     break
-            # print("\n")
+
+            if print_debug:
+                print("\n")
 
             if break_key:
                 continue
@@ -618,8 +609,8 @@ def rrt_div(grid, start, goal_rrt_div, lim=1_000_000, max_t=10_000_000_000):
     moves = [current_pos]
     goal_rrt_div = goal_rrt_div[::-1]
 
-    debounce = True
-    debounce_random_pose = True
+    debounce = False
+    debounce_random_pose = False
 
     previous_positions = []
 
@@ -680,7 +671,6 @@ def rrt_div(grid, start, goal_rrt_div, lim=1_000_000, max_t=10_000_000_000):
                 path.append((current_node.y, current_node.x))
                 current_node = current_node.parent
 
-            # path.append((start[0], start[1]))
             path.reverse()
             final_pt = [start]
             retry = False
@@ -705,7 +695,11 @@ def rrt_div(grid, start, goal_rrt_div, lim=1_000_000, max_t=10_000_000_000):
 
 def random_pos_fast(counter_close, goal, rows, cols):
     p = 0.10 if counter_close < 3 else 0.25 if counter_close < 5 else 0.50
-    # print(p)
+
+    print_debug = False
+    if print_debug:
+        print(p)
+
     if random.randint(1, 100) / 100 < p:
         return random_rrt_pos_max_dist(goal[1], goal[0], rows, cols, int(1 / p))
     else:
@@ -732,20 +726,6 @@ def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
         if local_pose is None:
             continue
 
-        # if obstacle_collide_bresenham_line(grid, *local_pose, current_pos.x, current_pos.y, checked_combos):
-        #     counter_close = 0
-        #     continue
-
-        # nb_of_new_poses += 1
-        # local_cost = distance(local_pose, goal)
-        #
-        # if local_cost < min_cost:
-        #     min_cost = local_cost
-        #     new_pose = NodeRRTStar(*local_pose)
-        #
-        # if new_pose is None:
-        #     continue
-
         new_pose = NodeRRTStar(*local_pose)
         dist, nearest_nd, points = nearest_node(moves, *local_pose)
 
@@ -758,8 +738,6 @@ def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
 
         chain_rrt_star(new_pose, nearest_nd)
 
-        # current_pos = new_pose
-
         moves.append(new_pose)
 
         counter += 1
@@ -767,10 +745,6 @@ def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
         if goal[1] == new_pose.x and goal[0] == new_pose.y:
             path = []
             current_node = new_pose
-
-            # while current_node is not None:
-            #     path.append((current_node.y, current_node.x))
-            #     current_node = current_node.parent
 
             while current_node.parent is not None:
                 points = bresenham_line(current_node.x, current_node.y, current_node.parent.x, current_node.parent.y)
@@ -780,7 +754,6 @@ def rrt_fast(grid, start, goal, lim=1_000, max_t=10):
 
                 current_node = current_node.parent
 
-            # cost = current_node.cost
             path.append((start[1], start[0]))
             path.reverse()
 
@@ -914,8 +887,6 @@ def plot_blank_grid(grid, title):
 
     plt.imshow(grid, cmap=map_cmap, norm=map_norm, interpolation='none')
     legend_labels = [state.name for state in MapState]
-    # legend_handles = [plt.Rectangle((0, 0), 1, 1,
-    #                                 color=map_cmap(map_norm(i + 1))) for i in range(len(legend_labels))]
 
     plt.title(f'Robot Environment - {title}')
     plt.xlabel('X')
@@ -935,6 +906,7 @@ def plot_blank_grid(grid, title):
 def plot_grid(grid, path, text):
     colors = ['blue', 'white', 'black', (0.6, 0.6, 0.6), 'green']
     Ts = 1 / 144
+
     map_cmap = ListedColormap(colors, name='color_map')
     bounds = [i + 1 for i in range(len(colors) + 1)]
     map_norm = BoundaryNorm(bounds, len(bounds) - 1)
@@ -994,7 +966,6 @@ def print_statistics(data, title):
         min_val = np.min(clean_data)
         max_val = np.max(clean_data)
 
-        # Print the calculated statistics
         print(f"Mean: {mean:.2f}")
         print(f"Standard Deviation: {std_dev:.2f}")
         print(f"Median: {median:.2f}")
@@ -1010,7 +981,6 @@ def read_from_excel(filename):
 
     results = {}
     current_method = None
-    # category = None
 
     for index, row in df.iterrows():
         if pd.isna(row[0]):
@@ -1118,14 +1088,12 @@ def plot_comparison_individual(methods, path_lengths, number_of_turns, smoothnes
     num_methods = len(methods)
     num_criteria = len(criteria)
 
-    # Iterate over each method and create a separate figure for each
     for j in range(num_methods):
-        fig, ax = plt.subplots(figsize=(8, 6))  # Smaller figure size for individual plots
+        fig, ax = plt.subplots(figsize=(8, 6))
 
         bar_width = 0.5
-        index = np.arange(num_criteria)  # Index for criteria
+        index = np.arange(num_criteria)
 
-        # Plot bars for each criterion for the current method
         for i in range(num_criteria):
             ax.bar(index[i] + bar_width, data[i][j], bar_width, label=criteria[i])
 
@@ -1133,11 +1101,41 @@ def plot_comparison_individual(methods, path_lengths, number_of_turns, smoothnes
         ax.set_ylabel('Values')
         ax.set_title(f'Comparison of {methods[j]} by Various Criteria')
         ax.set_xticks(index + bar_width)
-        ax.set_xticklabels(criteria)  # Label with criterion names
+        ax.set_xticklabels(criteria)
         ax.legend()
 
         plt.tight_layout()
         plt.show()
+
+
+def write_comparison_to_excel(methods, path_lengths, number_of_turns, smoothness, execution_times, energy_costs,
+                              fail_nb, criteria, path=".", file_name="comparison_results.xlsx"):
+    num_methods = len(methods)
+
+    data_frames = []
+    for j in range(num_methods):
+        data = {
+            'Criteria': criteria,
+            'Values': [
+                path_lengths[j],
+                number_of_turns[j],
+                smoothness[j],
+                execution_times[j],
+                energy_costs[j],
+                fail_nb[j]
+            ]
+        }
+        df = pd.DataFrame(data, columns=['Criteria', 'Values'])
+        df['Method'] = methods[j]
+        data_frames.append(df)
+
+    result_df = pd.concat(data_frames, axis=0)
+    result_df.set_index(['Method', 'Criteria'], inplace=True)
+
+    full_path = os.path.join(path, file_name)
+
+    result_df.to_excel(full_path, engine='openpyxl')
+    print(f"Data successfully written to {full_path}.")
 
 
 def eliminate_duplicates(lst):
@@ -1189,19 +1187,36 @@ def main():
     def s2ns(sec):
         return sec * 1_000_000_000
 
+    def get_grid_type():
+        if simple_grid:
+            return "SimpleGrid"
+        elif random_grid and not plus_grid:
+            return "RandomGrid_20x20"
+        elif random_grid and plus_grid:
+            return "RandomGrid_50x50"
+        elif lidar_grid:
+            return "LidarGrid"
+        return "NoGridDefined"
+
     simple_grid = False
+
     random_grid = True
     plus_grid = True
-    lidar_grid = False
-    grid = None
 
+    lidar_grid = False
+
+    grid = None
     robot_pos = None
     goal = None
 
-    frame_by_frame = False
+    frame_by_frame = True
+
     use_ga = False
     use_astar = False
     use_astar_stats = False
+
+    write_mean_excel = False
+    write_full_excel = False
 
     if simple_grid:
         shape_lines = 5
@@ -1318,7 +1333,7 @@ def main():
 
         # plot_blank_grid(grid, "Enhanced Complexity in Simulated Environments")
 
-    nb_of_test = 100
+    nb_of_test = 500
 
     rrt_nb_list, rrt_nb_of_turns, rrt_smoothness, rrt_nb_t_exec, rrt_nb_cost, rrt_nb_fails = \
         [], [], [], [], [], 0
@@ -1336,7 +1351,7 @@ def main():
     astar_nb_list, astar_nb_of_turns, astar_smoothness, astar_nb_t_exec, astar_nb_cost, astar_nb_fails = \
         [], [], [], [], [], 0
 
-    max_time = s2ns(0.5)  # 0.5
+    max_time = s2ns(0.5)
     lim_iter = 10_000_000
 
     if use_astar:
@@ -1350,7 +1365,7 @@ def main():
             else:
                 plot_grid(grid=grid, path=astar_sol, text='A*')
                 astar_nb_list.append(len(astar_sol[1]))
-            astar_nb_t_exec.append(1)  # astar_sol[2] / 1_000_000)
+            astar_nb_t_exec.append(astar_sol[2] / 1_000_000)
             astar_nb_cost.append(astar_sol[3])
             astar_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(astar_sol[1])))
             astar_smoothness.append(calculate_smoothness(eliminate_duplicates(astar_sol[1])))
@@ -1389,7 +1404,7 @@ def main():
                 else:
                     plot_grid(grid=grid, path=astar_sol, text='A*')
                     astar_nb_list.append(len(astar_sol[1]))
-                astar_nb_t_exec.append(1)  # astar_sol[2] / 1_000_000)
+                astar_nb_t_exec.append(astar_sol[2] / 1_000_000)
                 astar_nb_cost.append(astar_sol[3])
                 astar_nb_of_turns.append(calculate_number_of_turns(eliminate_duplicates(astar_sol[1])))
                 astar_smoothness.append(calculate_smoothness(eliminate_duplicates(astar_sol[1])))
@@ -1674,8 +1689,14 @@ def main():
     plot_deviations(methods, [path_lengths, number_of_turns, smoothness, execution_times, energy_costs], criteria[:-1],
                     mean_values)
 
-    write_excel = False
-    if write_excel:
+    if write_mean_excel:
+        current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'result_{get_grid_type()}_{current_time}.xlsx'
+        filepath = "./results"
+        write_comparison_to_excel(methods, path_lengths, number_of_turns, smoothness, execution_times,
+                                  energy_costs, number_of_fails, criteria, filepath, filename)
+
+    if write_full_excel:
         current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f'result{current_time}.xlsx'
 
@@ -1732,8 +1753,9 @@ def main():
                         else:
                             worksheet.write(row, col, val)
                     row += 1
-                row += 1  # add a blank line after each method
+                row += 1
         print("Ended Write Excel")
 
 
-main()
+if __name__ == '__main__':
+    main()
