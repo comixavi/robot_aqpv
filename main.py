@@ -157,11 +157,11 @@ def populate_map(lidar_x_data, lidar_y_data, robot, goal=None, resolution=0.25):
         else:
             return 0
 
-    def x_discrete(el):
-        return int((el - x_min) / resolution)
+    def x_discrete(el_to_disc):
+        return int((el_to_disc - x_min) / resolution)
 
-    def y_discrete(el):
-        return int((el - y_min) / resolution)
+    def y_discrete(el_to_disc):
+        return int((el_to_disc - y_min) / resolution)
 
     non_inf_numbers = [num for num in lidar_x_data if not np.isinf(num) and not np.isnan(num)]
     x_min = closest_integer(min(non_inf_numbers))
@@ -208,7 +208,7 @@ def populate_map(lidar_x_data, lidar_y_data, robot, goal=None, resolution=0.25):
     else:
         need_to_clean = True
         if need_to_clean:
-            cleaning_space = int(1 / resolution)
+            cleaning_space = int(robot.diag / resolution)
             offset = [cleaning_space - i for i in range(cleaning_space * 2 + 1)]
             neighborhood = [(i, j) for i in offset for j in offset]
 
@@ -227,25 +227,33 @@ def populate_map(lidar_x_data, lidar_y_data, robot, goal=None, resolution=0.25):
     num_blocks = int(robot.diag / resolution)
 
     extended_matrix = matrix.copy()
-    offset = [num_blocks - i for i in range(num_blocks * 2 + 1)]
-    neighborhood = [(i, j) for i in offset for j in offset if i != j]
 
-    for row in range(rows):
-        for col in range(cols):
-            if extended_matrix[row, col] == MapState.OBSTACLE.value:
-                for dr, dc in neighborhood:
-                    new_row, new_col = row + dr, col + dc
-                    if 0 <= new_row < rows and 0 <= new_col < cols:
-                        if matrix[new_row, new_col] == MapState.FREE.value:
-                            extended_matrix[new_row, new_col] = MapState.EXTENDED_OBSTACLE.value
+    extend_objects = True
+    if extend_objects:
+        offset = [num_blocks - i for i in range(num_blocks * 2 + 1)]
+        neighborhood = [(i, j) for i in offset for j in offset]
+
+        for row in range(rows):
+            for col in range(cols):
+                if extended_matrix[row, col] == MapState.OBSTACLE.value:
+                    for dr, dc in neighborhood:
+                        new_row, new_col = row + dr, col + dc
+                        if 0 <= new_row < rows and 0 <= new_col < cols:
+                            if matrix[new_row, new_col] == MapState.FREE.value:
+                                extended_matrix[new_row, new_col] = MapState.EXTENDED_OBSTACLE.value
 
     # Region: goal
     if goal:
         extended_matrix[goal[0], goal[1]] = MapState.GOAL.value
 
     if debug_print:
-        for line in extended_matrix:
-            print(len(line))
+        print("var = [", end="")
+        for ind_b, line in  enumerate(extended_matrix):
+            print("[", end="")
+            for ind, el in enumerate(line):
+                end = ", " if ind != len(line)-1 else "], \n"
+                print(f"{el}", end=end)
+        print("]")
 
     return point, extended_matrix
 
@@ -435,7 +443,7 @@ def plot_complete_scan(path_scan1, path_scan2):
 
     max_time = None
     lim_iter = 100_000_000
-    random_goal = False
+    random_goal = True
 
     for i in range(1, nb_of_tests + 1):
         print(f"Current iteration: {i}/{nb_of_tests} [{i / nb_of_tests * 100}%]")
@@ -573,6 +581,8 @@ def plot_complete_scan(path_scan1, path_scan2):
 
             plt.legend()
             plt.title("Sensor fusion visualization")
+            plt.xlabel("Workspace X [m]")
+            plt.ylabel("Workspace Y [m]")
 
             x_min = min([x_min, min(filter_arr(x_lidar))])
             x_max = max([x_max, max(filter_arr(x_lidar))])
@@ -580,7 +590,9 @@ def plot_complete_scan(path_scan1, path_scan2):
             y_max = max([y_max, max(filter_arr(y_lidar))])
 
         if not continuous_time:
-            robot_point, map_matrix = populate_map(lidar_x_data=x_lidar, lidar_y_data=y_lidar, robot=robot)
+            res = 0.25
+            robot_point, map_matrix = populate_map(lidar_x_data=x_lidar, lidar_y_data=y_lidar,
+                                                   robot=robot, resolution=res)
             y_loc, x_loc = map_matrix.shape
             x_min = 0
             y_min = 0
@@ -590,15 +602,19 @@ def plot_complete_scan(path_scan1, path_scan2):
             cols = len(map_matrix[0])
 
             max_time = Ts * 1_000_000_000
-            if not random_goal:
-                goal = [min(rows - 1, 10), min(cols - 1, 40)]
-            else:
-                goal = [random.randint(0, rows - 1), random.randint(0, cols - 1)]
 
-            while map_matrix[goal[0]][goal[1]] != MapState.FREE.value:
-                goal = [random.randint(0, rows - 1), random.randint(0, cols - 1)]
+            goal_place = True
 
-            place_goal(extended_matrix=map_matrix, goal=goal)
+            if goal_place:
+                if not random_goal:
+                    goal = [min(rows - 1, 10), min(cols - 1, 40)]
+                else:
+                    goal = [random.randint(0, rows - 1), random.randint(0, cols - 1)]
+
+                while map_matrix[goal[0]][goal[1]] != MapState.FREE.value:
+                    goal = [random.randint(0, rows - 1), random.randint(0, cols - 1)]
+
+                place_goal(extended_matrix=map_matrix, goal=goal)
 
             plt.imshow(map_matrix, cmap=map_cmap, norm=map_norm, interpolation='none')
             legend_labels = [state.name for state in MapState]
@@ -606,12 +622,13 @@ def plot_complete_scan(path_scan1, path_scan2):
                                             color=map_cmap(map_norm(i + 1))) for i in range(len(legend_labels))]
 
             plt.title('Results')
-            plt.xlabel('X')
-            plt.ylabel('Y')
+            plt.xlabel(f'X [grid tile size {res}m]')
+            plt.ylabel(f'Y [grid tile size {res}m]')
             plt.xlim(x_min, x_max)
             plt.ylim(y_min, y_max)
 
-            algorithms = ['RRT', 'RRT_Connect', 'RRT_Div', 'RRT_Fast', 'RRT_Star']
+            # algorithms = ['RRT', 'RRT_Connect', 'RRT_Div', 'RRT_Fast', 'RRT_Star']
+            algorithms = []
             for algorithm in algorithms:
                 result = None
 
@@ -662,8 +679,8 @@ def plot_complete_scan(path_scan1, path_scan2):
 
             plt.legend(legend_handles, legend_labels, loc='upper right')
 
-        print("")
-        print(Ts)
+        # print("")
+        # print(Ts)
 
         plt.xlim(x_min, x_max)
         plt.ylim(y_min, y_max)
@@ -675,6 +692,7 @@ def plot_complete_scan(path_scan1, path_scan2):
 
     plot_comparison_individual(test_results, nb_of_tests)
     plot_comparison(test_results, nb_of_tests)
+
     current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
     filename = f'result_{get_grid_type()}_{current_time}.xlsx'
     filepath = "./results"
@@ -682,24 +700,24 @@ def plot_complete_scan(path_scan1, path_scan2):
 
 
 def plot_scan(*paths, nbOfRanges=1681):
-    def draw_binary_frame():
-        dists = [float(r) for r in line[:-1].split(',')[start_ranges_offset:start_ranges_offset + nbOfRanges]]
-
-        x = [center_x + dists[idx_x] * cos_list[idx_x] for idx_x in range(nbOfRanges)]
-        y = [center_y + dists[idx_y] * sin_list[idx_y] for idx_y in range(nbOfRanges)]
-
-        occupancy_matrix = populate_map(lidar_x_data=x, lidar_y_data=y, resolution=0.10)
-
-        plt.imshow(occupancy_matrix, cmap='binary', origin='lower')
-
-        plt.title('Occupancy Map')
-        plt.xlabel('X')
-        plt.ylabel('Y')
-
-        path_astar = astar(occupancy_matrix, (0, 0), (30, 25))
-        if path_astar:
-            path_astar = np.array(path_astar)
-            plt.plot(path_astar[:, 1], path_astar[:, 0], color='lime', marker='o')
+    # def draw_binary_frame():
+    #     dists = [float(r) for r in line[:-1].split(',')[start_ranges_offset:start_ranges_offset + nbOfRanges]]
+    #
+    #     x = [center_x + dists[idx_x] * cos_list[idx_x] for idx_x in range(nbOfRanges)]
+    #     y = [center_y + dists[idx_y] * sin_list[idx_y] for idx_y in range(nbOfRanges)]
+    #
+    #     occupancy_matrix = populate_map(lidar_x_data=x, lidar_y_data=y, resolution=0.10)
+    #
+    #     plt.imshow(occupancy_matrix, cmap='binary', origin='lower')
+    #
+    #     plt.title('Occupancy Map')
+    #     plt.xlabel('X')
+    #     plt.ylabel('Y')
+    #
+    #     path_astar = astar(occupancy_matrix, (0, 0), (30, 25))
+    #     if path_astar:
+    #         path_astar = np.array(path_astar)
+    #         plt.plot(path_astar[:, 1], path_astar[:, 0], color='lime', marker='o')
 
     def draw_frame():
         dists = [float(r) for r in line[:-1].split(',')[start_ranges_offset:start_ranges_offset + nbOfRanges]]
@@ -765,10 +783,10 @@ def plot_scan(*paths, nbOfRanges=1681):
             ax.set_title(path)
             line = data[path][i]
 
-            if draw_binary:
-                draw_binary_frame()
-            else:
-                draw_frame()
+            # if draw_binary:
+            #     draw_binary_frame()
+            # else:
+            draw_frame()
 
         plt.tight_layout()
         plt.draw()
