@@ -1,0 +1,5 @@
+This paper is the most recent version of my bachelor degree done in English. For my final version I needed to change in Romanian.
+The final version included multiple new additions: 
+	-> tests: cross obstacles, crosses and lines, real time from the environment, random obstacles at random time moments;
+	-> real life test; 
+	-> small reworks of the algorithms;
