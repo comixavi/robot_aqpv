@@ -4,7 +4,6 @@ Important:
 	-> main.py: Functions for reading from files, constructing the map, all adjacent operations for visualization, calling functions, and visualizing solutions are implemented here.
 	-> astar.py: Implementation of the A* algorithm.
 	-> mapstate_.py: Contains the enum with possible states and their values on the map.
-
 Adjacent Files:
 	-> util_.py: Implementation of the Bresenham line algorithm.
 	-> test_plot_state.py: Used for visualizing different scenarios during development.
@@ -21,7 +20,6 @@ Excel Files:
 	-> model_params.xlsx: Parameters obtained for the neural network during testing.
 	-> *.bag: Files obtained from LiDAR.
 	-> *.txt: Conversion of .bag files for processing.
-
 Exceptions:
 	-> run_all.txt: ROS configuration file from the robot.
 	-> readme.txt: This readme file itself.
